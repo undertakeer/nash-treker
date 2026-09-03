@@ -6,7 +6,7 @@ import { useStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
 import { squareThumb } from "../lib/image";
 import { COLOR_KEYS, COLORS, hex, rgba } from "../lib/theme";
-import { addDays, days, humanDateFull, todayISO } from "../lib/date";
+import { addDays, days, humanDateFull, isoWeekday, todayISO } from "../lib/date";
 import { bestStreak, streak } from "../lib/stats";
 
 const BADGES = {
@@ -16,9 +16,10 @@ const BADGES = {
   streak_365: { emoji: "👑", title: "Год подряд" },
 };
 
-export default function Profile({ onOpenNotifications }) {
+export default function Profile({ onOpenNotifications, onOpen }) {
   const {
-    me, uid, habits, checkins, achievements, doneSetFor, updateProfile, signOut, showToast, restoreHabit,
+    me, uid, habits, checkins, achievements, doneSetFor, freezeSetFor,
+    updateProfile, signOut, showToast, restoreHabit, points, photos,
   } = useStore();
   const fileRef = useRef(null);
   const [name, setName] = useState(me?.display_name || "");
@@ -36,8 +37,9 @@ export default function Profile({ onOpenNotifications }) {
     let currentTotal = 0;
     active.forEach((h) => {
       const s = doneSetFor(h.id, uid);
-      best = Math.max(best, bestStreak(h, s, (h.created_at || todayISO()).slice(0, 10)));
-      currentTotal = Math.max(currentTotal, streak(h, s));
+      const fz = freezeSetFor(h.id, uid);
+      best = Math.max(best, bestStreak(h, s, (h.created_at || todayISO()).slice(0, 10), fz));
+      currentTotal = Math.max(currentTotal, streak(h, s, fz));
     });
 
     const firstDay = mine.reduce((min, c) => (!min || c.day < min ? c.day : min), null);
@@ -55,16 +57,31 @@ export default function Profile({ onOpenNotifications }) {
       currentTotal,
       daysWithUs,
     };
-  }, [habits, uid, doneSetFor, mine]);
+  }, [habits, uid, doneSetFor, freezeSetFor, mine]);
+
+  const [heatYear, setHeatYear] = useState(new Date().getFullYear());
 
   const heat = useMemo(() => {
-    const set = new Set(mine.map((c) => c.day));
+    const counts = new Map();
+    mine.forEach((c) => counts.set(c.day, (counts.get(c.day) || 0) + 1));
     const out = [];
-    for (let i = 118; i >= 0; i--) {
-      const iso = addDays(todayISO(), -i);
-      out.push({ iso, on: set.has(iso) });
+    const start = `${heatYear}-01-01`;
+    const end = heatYear === new Date().getFullYear() ? todayISO() : `${heatYear}-12-31`;
+    let iso = start;
+    // выравниваем начало на понедельник, чтобы сетка была ровной
+    while (isoWeekday(iso) !== 1) iso = addDays(iso, -1);
+    while (iso <= end) {
+      out.push({ iso, count: counts.get(iso) || 0, inYear: iso.startsWith(String(heatYear)) });
+      iso = addDays(iso, 1);
     }
     return out;
+  }, [mine, heatYear]);
+
+  const years = useMemo(() => {
+    const first = mine.reduce((min, c) => (!min || c.day < min ? c.day : min), null);
+    const from = first ? Number(first.slice(0, 4)) : new Date().getFullYear();
+    const to = new Date().getFullYear();
+    return Array.from({ length: to - from + 1 }, (_, i) => to - i);
   }, [mine]);
 
   async function pickAvatar(e) {
@@ -127,22 +144,60 @@ export default function Profile({ onOpenNotifications }) {
         <Stat value={stats.best} label="Рекорд за всё время" glyph="💎" accent={accent} />
       </div>
 
-      <Card className="p-4 mb-6">
-        <div className="text-[13px] font-semibold text-white/45 mb-3">Активность за 4 месяца</div>
-        <div className="flex flex-wrap gap-[3px]">
-          {heat.map((d) => (
-            <span
-              key={d.iso}
-              title={d.iso}
-              className="rounded-[3px]"
-              style={{
-                width: 11, height: 11,
-                background: d.on ? hex(accent) : "rgba(255,255,255,.06)",
-              }}
-            />
-          ))}
+      <Card className="p-4 mb-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[13px] font-semibold text-white/45">Год в квадратиках</div>
+          {years.length > 1 && (
+            <div className="flex gap-1">
+              {years.slice(0, 4).map((y) => (
+                <button
+                  key={y}
+                  onClick={() => setHeatYear(y)}
+                  className="press px-2 py-0.5 rounded-lg text-[12px] font-bold"
+                  style={{
+                    background: heatYear === y ? rgba(accent, 0.24) : "rgba(255,255,255,.05)",
+                    color: heatYear === y ? hex(accent) : "rgba(255,255,255,.4)",
+                  }}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="overflow-x-auto no-scrollbar -mx-1 px-1">
+          <div
+            className="grid grid-flow-col gap-[3px]"
+            style={{ gridTemplateRows: "repeat(7, 10px)" }}
+          >
+            {heat.map((d) => (
+              <span
+                key={d.iso}
+                title={`${d.iso}: ${d.count}`}
+                className="rounded-[2.5px]"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: !d.inYear
+                    ? "transparent"
+                    : d.count
+                    ? rgba(accent, Math.min(1, 0.35 + d.count * 0.22))
+                    : "rgba(255,255,255,.06)",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="text-[12px] text-white/25 mt-2.5">
+          {mine.filter((c) => c.day.startsWith(String(heatYear))).length} отметок за {heatYear}
         </div>
       </Card>
+
+      <div className="grid grid-cols-3 gap-2.5 mb-6">
+        <Quick emoji="🪙" value={points.balance} label="Баллы" onClick={() => onOpen("shop")} color="amber" />
+        <Quick emoji="📸" value={photos.length} label="Фото" onClick={() => onOpen("gallery")} color="violet" />
+        <Quick emoji="📊" value="" label="Итоги" onClick={() => onOpen("summary")} color="sky" />
+      </div>
 
       <Section title="Настройки">
         <Card className="divide-y divide-white/6">
@@ -290,5 +345,21 @@ function Section({ title, children }) {
       </h2>
       {children}
     </section>
+  );
+}
+
+function Quick({ emoji, value, label, onClick, color }) {
+  return (
+    <button
+      onClick={onClick}
+      className="press rounded-2xl py-3 flex flex-col items-center gap-0.5"
+      style={{ background: rgba(color, 0.12), border: `1px solid ${rgba(color, 0.16)}` }}
+    >
+      <span className="text-[19px] leading-none">{emoji}</span>
+      {value !== "" && (
+        <span className="text-[15px] font-extrabold" style={{ color: hex(color) }}>{value}</span>
+      )}
+      <span className="text-[11.5px] font-semibold text-white/50">{label}</span>
+    </button>
   );
 }

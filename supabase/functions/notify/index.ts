@@ -20,8 +20,28 @@ Deno.serve(async (req) => {
     const actorId = userData?.user?.id;
     if (!actorId) return json({ error: "unauthorized" }, 401);
 
-    const { kind, habit_id, target_id } = await req.json();
+    const { kind, habit_id, target_id, purchase_id } = await req.json();
     const admin = adminClient();
+
+    // покупка желания: партнёру прилетает заказ на исполнение
+    if (kind === "purchase") {
+      const { data: purchase } = await admin
+        .from("purchases").select("*").eq("id", purchase_id).maybeSingle();
+      if (!purchase) return json({ error: "purchase not found" }, 404);
+
+      const { data: people } = await admin.from("profiles").select("*");
+      const buyer = people?.find((p) => p.id === purchase.buyer_id);
+      const others = people?.filter((p) => p.id !== purchase.buyer_id) ?? [];
+      let done = 0;
+      for (const person of others) {
+        done += await sendToUser(admin, person.id, {
+          title: `${purchase.emoji} ${purchase.title}`,
+          body: `${shortName(buyer?.display_name)} ${verb(buyer?.display_name, "потратил", "потратила")} ${purchase.price} баллов — пора исполнять`,
+          tag: `purchase-${purchase.id}`,
+        });
+      }
+      return json({ ok: true, sent: done });
+    }
 
     const [{ data: habit }, { data: profiles }] = await Promise.all([
       admin.from("habits").select("*").eq("id", habit_id).maybeSingle(),

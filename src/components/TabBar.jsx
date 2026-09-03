@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 
 const TABS = [
   { id: "home", label: "Привычки", glyph: "◎" },
+  { id: "today", label: "Сегодня", glyph: "✓" },
   { id: "together", label: "Мы", glyph: "❤" },
   { id: "profile", label: "Профиль", glyph: "☺" },
 ];

@@ -7,7 +7,7 @@ import { isScheduled, scheduleLabel, streak } from "../lib/stats";
 import { todayISO, weekDays } from "../lib/date";
 
 export default function HabitCard({
-  habit, featured = false, participants, doneSets, myId, canCheck, onOpen, onToggle,
+  habit, featured = false, participants, doneSets, freezeSets = {}, myId, canCheck, onOpen, onToggle,
 }) {
   const today = todayISO();
   const color = habit.color || "mint";
@@ -31,7 +31,11 @@ export default function HabitCard({
     doneSets[a.id]?.forEach((iso) => { if (doneSets[b.id]?.has(iso)) combinedSet.add(iso); });
   }
   const streakSet = participants.length > 1 ? combinedSet : doneSets[participants[0]?.id] || new Set();
-  const value = streak(habit, streakSet);
+  const freezeSet =
+    participants.length > 1
+      ? new Set(participants.flatMap((p) => [...(freezeSets[p.id] || [])]))
+      : freezeSets[participants[0]?.id] || new Set();
+  const value = streak(habit, streakSet, freezeSet);
 
   const iDid = myId ? doneSets[myId]?.has(today) : false;
   const doneIds = participants.filter((p) => doneSets[p.id]?.has(today)).map((p) => p.id);

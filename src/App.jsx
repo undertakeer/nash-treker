@@ -3,7 +3,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { StoreProvider, useStore } from "./lib/store";
 import Auth from "./screens/Auth";
 import Home from "./screens/Home";
+import Today from "./screens/Today";
 import Together from "./screens/Together";
+import Gallery from "./screens/Gallery";
+import Shop from "./screens/Shop";
+import Goals from "./screens/Goals";
+import MonthSummary from "./screens/MonthSummary";
 import Profile from "./screens/Profile";
 import HabitDetail from "./screens/HabitDetail";
 import HabitEditor from "./screens/HabitEditor";
@@ -19,6 +24,7 @@ function Shell() {
   const [openHabit, setOpenHabit] = useState(null);
   const [editor, setEditor] = useState({ open: false, habit: null });
   const [notifOpen, setNotifOpen] = useState(false);
+  const [modal, setModal] = useState(null); // gallery | shop | goals | summary
   const [burst, setBurst] = useState(null);
 
   const fireBurst = useCallback((colorKey) => {
@@ -65,8 +71,11 @@ function Shell() {
               onBurst={fireBurst}
             />
           )}
-          {tab === "together" && <Together />}
-          {tab === "profile" && <Profile onOpenNotifications={() => setNotifOpen(true)} />}
+          {tab === "today" && <Today onOpenHabit={setOpenHabit} onBurst={fireBurst} />}
+          {tab === "together" && <Together onOpen={setModal} />}
+          {tab === "profile" && (
+            <Profile onOpenNotifications={() => setNotifOpen(true)} onOpen={setModal} />
+          )}
         </motion.main>
       </AnimatePresence>
 
@@ -89,6 +98,10 @@ function Shell() {
       />
 
       <Notifications open={notifOpen} onClose={() => setNotifOpen(false)} />
+      <Gallery open={modal === "gallery"} onClose={() => setModal(null)} />
+      <Shop open={modal === "shop"} onClose={() => setModal(null)} />
+      <Goals open={modal === "goals"} onClose={() => setModal(null)} />
+      <MonthSummary open={modal === "summary"} onClose={() => setModal(null)} />
 
       {burst && <Confetti key={burst.id} colorKey={burst.colorKey} />}
       <Toast toast={toast} />

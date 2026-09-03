@@ -7,15 +7,17 @@ import { hex, rgba } from "../lib/theme";
 import { relativeDay, todayISO, weekDays, WEEKDAY_SHORT } from "../lib/date";
 import { isScheduled } from "../lib/stats";
 import { activeMood, moodAge, moodLabel } from "../lib/moods";
+import { goalProgressDays } from "./Goals";
 
 const REACTIONS = ["❤️", "🔥", "👏", "😍"];
 
-export default function Together() {
-  const { habits, profiles, checkins, uid, events, react, doneSetFor } = useStore();
+export default function Together({ onOpen }) {
+  const { habits, profiles, checkins, uid, events, react, doneSetFor, points, photos, goals } = useStore();
   const today = todayISO();
   const week = weekDays(today);
 
   const active = useMemo(() => habits.filter((h) => h.status === "active"), [habits]);
+  const activeGoals = useMemo(() => goals.filter((g) => !g.completed_at), [goals]);
 
   const perPerson = useMemo(() => {
     return profiles.map((p) => {
@@ -67,6 +69,39 @@ export default function Together() {
         <div className="text-[12px] font-bold tracking-[0.14em] text-white/35 uppercase mb-1">Вместе</div>
         <h1 className="text-[29px] font-extrabold tracking-tight leading-none">Мы</h1>
       </header>
+
+      <div className="grid grid-cols-4 gap-2 mb-4">
+        <Tile emoji="📸" label="Галерея"  badge={photos.length}   onClick={() => onOpen("gallery")} color="violet" />
+        <Tile emoji="🪙" label="Магазин"  badge={points.balance}  onClick={() => onOpen("shop")}    color="amber" />
+        <Tile emoji="🎯" label="Цели"     badge={activeGoals.length} onClick={() => onOpen("goals")} color="mint" />
+        <Tile emoji="📊" label="Итоги"    onClick={() => onOpen("summary")} color="sky" />
+      </div>
+
+      {activeGoals.length > 0 && (
+        <Card className="p-4 mb-3">
+          <div className="text-[13px] font-semibold text-white/45 mb-3">Наша цель</div>
+          {activeGoals.slice(0, 2).map((g) => {
+            const doneDays = goalProgressDays(g, profiles, checkins);
+            const habit = habits.find((h) => h.id === g.habit_id);
+            const color = habit?.color || "mint";
+            return (
+              <div key={g.id} className="mb-3 last:mb-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[17px]">{g.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-bold truncate">{g.title}</div>
+                    {g.reward && <div className="text-[12px] text-white/35 truncate">→ {g.reward}</div>}
+                  </div>
+                  <div className="text-[13px] font-extrabold" style={{ color: hex(color) }}>
+                    {doneDays}/{g.target}
+                  </div>
+                </div>
+                <Progress percent={Math.min(100, Math.round((doneDays / g.target) * 100))} colorKey={color} />
+              </div>
+            );
+          })}
+        </Card>
+      )}
 
       {profiles.some((p) => activeMood(p)) && (
         <Card className="p-4 mb-3">
@@ -233,5 +268,21 @@ export default function Together() {
         </div>
       )}
     </div>
+  );
+}
+
+function Tile({ emoji, label, badge, onClick, color = "mint" }) {
+  return (
+    <button
+      onClick={onClick}
+      className="press rounded-2xl py-3 flex flex-col items-center gap-1"
+      style={{ background: rgba(color, 0.12), border: `1px solid ${rgba(color, 0.16)}` }}
+    >
+      <span className="text-[20px] leading-none">{emoji}</span>
+      <span className="text-[11.5px] font-semibold text-white/60">{label}</span>
+      {badge !== undefined && badge !== null && (
+        <span className="text-[11px] font-extrabold" style={{ color: hex(color) }}>{badge}</span>
+      )}
+    </button>
   );
 }

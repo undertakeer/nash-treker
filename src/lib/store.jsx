@@ -4,12 +4,19 @@ import {
 import { supabase } from "./supabase";
 import { readCache, writeCache } from "./cache";
 import { todayISO } from "./date";
+import { fitThumb } from "./image";
 import { streak } from "./stats";
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
 
 const ckKey = (habitId, userId, day) => `${habitId}|${userId}|${day}`;
+
+/** Баллы за активность */
+export const POINTS_PER_CHECKIN = 10;
+export const POINTS_PER_BADGE = 100;
+/** Сколько заморозок стрика доступно в месяц */
+export const FREEZE_LIMIT = 2;
 
 /** Достижения, которые выдаём на клиенте после отметки */
 const STREAK_BADGES = [
@@ -27,6 +34,10 @@ export function StoreProvider({ children }) {
   const [events, setEvents] = useState(() => readCache("events", []));
   const [achievements, setAchievements] = useState(() => readCache("achievements", []));
   const [prefs, setPrefs] = useState(() => readCache("prefs", null));
+  const [freezes, setFreezes] = useState(() => readCache("freezes", []));
+  const [wishes, setWishes] = useState(() => readCache("wishes", []));
+  const [purchases, setPurchases] = useState(() => readCache("purchases", []));
+  const [goals, setGoals] = useState(() => readCache("goals", []));
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
   const [queue, setQueue] = useState(() => readCache("queue", []));
@@ -63,17 +74,25 @@ export function StoreProvider({ children }) {
   useEffect(() => writeCache("achievements", achievements), [achievements]);
   useEffect(() => writeCache("prefs", prefs), [prefs]);
   useEffect(() => writeCache("queue", queue), [queue]);
+  useEffect(() => writeCache("freezes", freezes), [freezes]);
+  useEffect(() => writeCache("wishes", wishes), [wishes]);
+  useEffect(() => writeCache("purchases", purchases), [purchases]);
+  useEffect(() => writeCache("goals", goals), [goals]);
 
   // ---------- загрузка ----------
   const loadAll = useCallback(async () => {
     if (!uid) return;
-    const [p, h, c, e, a, pr] = await Promise.all([
+    const [p, h, c, e, a, pr, fz, w, pu, g] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("habits").select("*").order("position").order("created_at"),
       supabase.from("checkins").select("*"),
       supabase.from("events").select("*, reactions(*)").order("created_at", { ascending: false }).limit(80),
       supabase.from("achievements").select("*").order("earned_at", { ascending: false }),
       supabase.from("notification_prefs").select("*").eq("user_id", uid).maybeSingle(),
+      supabase.from("freezes").select("*"),
+      supabase.from("wishes").select("*").order("position").order("created_at"),
+      supabase.from("purchases").select("*").order("created_at", { ascending: false }).limit(60),
+      supabase.from("goals").select("*").order("created_at", { ascending: false }),
     ]);
     if (!p.error) setProfiles(p.data || []);
     if (!h.error) setHabits(h.data || []);
@@ -81,6 +100,10 @@ export function StoreProvider({ children }) {
     if (!e.error) setEvents(e.data || []);
     if (!a.error) setAchievements(a.data || []);
     if (!pr.error && pr.data) setPrefs(pr.data);
+    if (!fz.error) setFreezes(fz.data || []);
+    if (!w.error) setWishes(w.data || []);
+    if (!pu.error) setPurchases(pu.data || []);
+    if (!g.error) setGoals(g.data || []);
     setLoading(false);
   }, [uid]);
 
@@ -114,6 +137,10 @@ export function StoreProvider({ children }) {
           });
         };
         if (table === "habits") apply(setHabits);
+        else if (table === "freezes") apply(setFreezes);
+        else if (table === "wishes") apply(setWishes);
+        else if (table === "purchases") apply(setPurchases);
+        else if (table === "goals") apply(setGoals);
         else if (table === "profiles") apply(setProfiles);
         else if (table === "achievements") apply(setAchievements);
         else if (table === "events") {
@@ -126,8 +153,11 @@ export function StoreProvider({ children }) {
           setCheckins((prev) => {
             const key = (x) => ckKey(x.habit_id, x.user_id, x.day);
             if (eventType === "DELETE") return prev.filter((x) => key(x) !== key(old));
-            if (prev.some((x) => key(x) === key(row))) return prev;
-            return [...prev, row];
+            const i = prev.findIndex((x) => key(x) === key(row));
+            if (i === -1) return [...prev, row];
+            const next = prev.slice();
+            next[i] = { ...next[i], ...row };
+            return next;
           });
         } else if (table === "reactions") {
           setEvents((prev) =>
@@ -202,6 +232,48 @@ export function StoreProvider({ children }) {
   const isDone = useCallback(
     (habitId, userId, day) => doneIndex.has(ckKey(habitId, userId, day)),
     [doneIndex]
+  );
+
+  const checkinFor = useCallback(
+    (habitId, userId, day) =>
+      checkins.find((c) => c.habit_id === habitId && c.user_id === userId && c.day === day) || null,
+    [checkins]
+  );
+
+  const freezeSetFor = useCallback(
+    (habitId, userId) => {
+      const s = new Set();
+      freezes.forEach((f) => {
+        if (f.habit_id === habitId && f.user_id === userId) s.add(f.day);
+      });
+      return s;
+    },
+    [freezes]
+  );
+
+  const freezesLeft = useMemo(() => {
+    const month = todayISO().slice(0, 7);
+    const used = freezes.filter((f) => f.user_id === uid && f.day.slice(0, 7) === month).length;
+    return Math.max(0, FREEZE_LIMIT - used);
+  }, [freezes, uid]);
+
+  const points = useMemo(() => {
+    const earned =
+      checkins.filter((c) => c.user_id === uid).length * POINTS_PER_CHECKIN +
+      achievements.filter((a) => a.user_id === uid).length * POINTS_PER_BADGE;
+    const spent = purchases
+      .filter((p) => p.buyer_id === uid && p.status !== "cancelled")
+      .reduce((sum, p) => sum + (p.price || 0), 0);
+    return { earned, spent, balance: earned - spent };
+  }, [checkins, achievements, purchases, uid]);
+
+  const photos = useMemo(
+    () =>
+      checkins
+        .filter((c) => c.photo_url)
+        .slice()
+        .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0)),
+    [checkins]
   );
 
   // ---------- действия ----------
@@ -398,18 +470,231 @@ export function StoreProvider({ children }) {
     [events, uid]
   );
 
+  // ---------- фотоотчёты и заметки ----------
+  const attachPhoto = useCallback(
+    async (habit, day, file) => {
+      if (!uid) return;
+      const blob = await fitThumb(file);
+      const path = `${uid}/${habit.id}/${day}-${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("moments")
+        .upload(path, blob, { contentType: "image/jpeg", upsert: true });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("moments").getPublicUrl(path);
+
+      const { data: row, error } = await supabase
+        .from("checkins")
+        .upsert({ habit_id: habit.id, user_id: uid, day, photo_url: data.publicUrl })
+        .select()
+        .single();
+      if (error) throw error;
+
+      setCheckins((prev) => {
+        const key = ckKey(habit.id, uid, day);
+        const i = prev.findIndex((c) => ckKey(c.habit_id, c.user_id, c.day) === key);
+        if (i === -1) return [...prev, row];
+        const next = prev.slice();
+        next[i] = { ...next[i], ...row };
+        return next;
+      });
+      showToast("Фото добавлено", "📸");
+      return row;
+    },
+    [uid, showToast]
+  );
+
+  const removePhoto = useCallback(
+    async (habit, day) => {
+      await supabase
+        .from("checkins")
+        .update({ photo_url: null })
+        .match({ habit_id: habit.id, user_id: uid, day });
+      setCheckins((prev) =>
+        prev.map((c) =>
+          c.habit_id === habit.id && c.user_id === uid && c.day === day
+            ? { ...c, photo_url: null }
+            : c
+        )
+      );
+      showToast("Фото удалено", "🗑");
+    },
+    [uid, showToast]
+  );
+
+  const setNote = useCallback(
+    async (habit, day, note) => {
+      const value = note?.trim() || null;
+      await supabase
+        .from("checkins")
+        .upsert({ habit_id: habit.id, user_id: uid, day, note: value });
+      setCheckins((prev) => {
+        const key = ckKey(habit.id, uid, day);
+        const i = prev.findIndex((c) => ckKey(c.habit_id, c.user_id, c.day) === key);
+        if (i === -1) return [...prev, { habit_id: habit.id, user_id: uid, day, note: value }];
+        const next = prev.slice();
+        next[i] = { ...next[i], note: value };
+        return next;
+      });
+    },
+    [uid]
+  );
+
+  // ---------- заморозка стрика ----------
+  const freezeDay = useCallback(
+    async (habit, day, reason) => {
+      if (freezesLeft <= 0) {
+        showToast(`Заморозки кончились — ${FREEZE_LIMIT} в месяц`, "🧊");
+        return false;
+      }
+      const row = { user_id: uid, habit_id: habit.id, day, reason: reason || null };
+      const { data, error } = await supabase.from("freezes").insert(row).select().single();
+      if (error) {
+        showToast("Не удалось заморозить", "⚠️");
+        return false;
+      }
+      setFreezes((prev) => (prev.some((f) => f.id === data.id) ? prev : [...prev, data]));
+      showToast("День заморожен — стрик цел", "🧊");
+      return true;
+    },
+    [uid, freezesLeft, showToast]
+  );
+
+  const unfreezeDay = useCallback(
+    async (habit, day) => {
+      setFreezes((prev) =>
+        prev.filter((f) => !(f.habit_id === habit.id && f.user_id === uid && f.day === day))
+      );
+      await supabase.from("freezes").delete().match({ habit_id: habit.id, user_id: uid, day });
+    },
+    [uid]
+  );
+
+  // ---------- желания и баллы ----------
+  const createWish = useCallback(
+    async (draft) => {
+      const maxPos = wishes.reduce((m, w) => Math.max(m, w.position || 0), 0);
+      const { data, error } = await supabase
+        .from("wishes")
+        .insert({ ...draft, owner_id: uid, position: maxPos + 1 })
+        .select()
+        .single();
+      if (error) throw error;
+      setWishes((prev) => (prev.some((w) => w.id === data.id) ? prev : [...prev, data]));
+      showToast("Желание добавлено", draft.emoji || "🎁");
+    },
+    [wishes, uid, showToast]
+  );
+
+  const updateWish = useCallback(async (id, patch) => {
+    setWishes((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)));
+    await supabase.from("wishes").update(patch).eq("id", id);
+  }, []);
+
+  const deleteWish = useCallback(
+    async (id) => {
+      setWishes((prev) => prev.filter((w) => w.id !== id));
+      await supabase.from("wishes").delete().eq("id", id);
+      showToast("Желание удалено", "🗑");
+    },
+    [showToast]
+  );
+
+  const buyWish = useCallback(
+    async (wish) => {
+      if (points.balance < wish.price) {
+        showToast("Не хватает баллов", "🪙");
+        return false;
+      }
+      const row = {
+        wish_id: wish.id,
+        buyer_id: uid,
+        title: wish.title,
+        emoji: wish.emoji,
+        price: wish.price,
+      };
+      const { data, error } = await supabase.from("purchases").insert(row).select().single();
+      if (error) {
+        showToast("Не удалось купить", "⚠️");
+        return false;
+      }
+      setPurchases((prev) => [data, ...prev]);
+      supabase.functions
+        .invoke("notify", { body: { kind: "purchase", purchase_id: data.id } })
+        .catch(() => {});
+      showToast(`Куплено: ${wish.title}`, "🎉");
+      return true;
+    },
+    [points.balance, uid, showToast]
+  );
+
+  const markPurchaseDone = useCallback(
+    async (purchase) => {
+      const patch = { status: "done", done_at: new Date().toISOString(), done_by: uid };
+      setPurchases((prev) => prev.map((p) => (p.id === purchase.id ? { ...p, ...patch } : p)));
+      await supabase.from("purchases").update(patch).eq("id", purchase.id);
+      showToast("Исполнено", "✅");
+    },
+    [uid, showToast]
+  );
+
+  const cancelPurchase = useCallback(
+    async (purchase) => {
+      const patch = { status: "cancelled" };
+      setPurchases((prev) => prev.map((p) => (p.id === purchase.id ? { ...p, ...patch } : p)));
+      await supabase.from("purchases").update(patch).eq("id", purchase.id);
+      showToast("Отменено, баллы вернулись", "↩️");
+    },
+    [showToast]
+  );
+
+  // ---------- совместные цели ----------
+  const createGoal = useCallback(
+    async (draft) => {
+      const { data, error } = await supabase
+        .from("goals")
+        .insert({ ...draft, created_by: uid })
+        .select()
+        .single();
+      if (error) throw error;
+      setGoals((prev) => (prev.some((g) => g.id === data.id) ? prev : [data, ...prev]));
+      showToast("Цель поставлена", draft.emoji || "🎯");
+    },
+    [uid, showToast]
+  );
+
+  const completeGoal = useCallback(
+    async (goal) => {
+      const patch = { completed_at: new Date().toISOString() };
+      setGoals((prev) => prev.map((g) => (g.id === goal.id ? { ...g, ...patch } : g)));
+      await supabase.from("goals").update(patch).eq("id", goal.id);
+      showToast("Цель достигнута", "🏆");
+    },
+    [showToast]
+  );
+
+  const deleteGoal = useCallback(async (id) => {
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+    await supabase.from("goals").delete().eq("id", id);
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
+    setFreezes([]); setWishes([]); setPurchases([]); setGoals([]);
   }, []);
 
   const value = {
     session, uid, me, partner, profiles,
     habits, checkins, events, achievements, prefs,
+    freezes, wishes, purchases, goals, points, photos, freezesLeft,
     loading, online, pendingCount: queue.length, toast,
-    isDone, doneSetFor,
+    isDone, doneSetFor, freezeSetFor, checkinFor,
     toggleCheckin, nudge, react,
     createHabit, updateHabit, deleteHabit, completeHabit, archiveHabit, restoreHabit, reorderHabits,
+    attachPhoto, removePhoto, setNote,
+    freezeDay, unfreezeDay,
+    createWish, updateWish, deleteWish, buyWish, markPurchaseDone, cancelPurchase,
+    createGoal, completeGoal, deleteGoal,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 

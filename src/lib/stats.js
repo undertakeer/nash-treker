@@ -18,7 +18,7 @@ function weeklyAllowance(habit) {
  * Стрик в днях. Считается назад от сегодня.
  * Сегодняшний день, если ещё не отмечен, стрик не рвёт.
  */
-export function streak(habit, doneSet) {
+export function streak(habit, doneSet, freezeSet) {
   const today = todayISO();
   const allowance = weeklyAllowance(habit);
   const missesByWeek = new Map();
@@ -31,6 +31,8 @@ export function streak(habit, doneSet) {
     const done = doneSet.has(cursor);
     if (done) {
       count++;
+    } else if (freezeSet?.has(cursor)) {
+      // заморозка: день не считается ни выполненным, ни пропущенным
     } else if (isScheduled(habit, cursor)) {
       if (firstStep) {
         // сегодня ещё можно успеть
@@ -48,7 +50,7 @@ export function streak(habit, doneSet) {
 }
 
 /** Лучший стрик за всю историю привычки */
-export function bestStreak(habit, doneSet, sinceISO) {
+export function bestStreak(habit, doneSet, sinceISO, freezeSet) {
   const today = todayISO();
   const from = sinceISO || today;
   const total = Math.max(0, diffDays(today, from));
@@ -63,6 +65,8 @@ export function bestStreak(habit, doneSet, sinceISO) {
     if (doneSet.has(iso)) {
       run++;
       best = Math.max(best, run);
+    } else if (freezeSet?.has(iso)) {
+      // заморозка стрик не рвёт
     } else if (isScheduled(habit, iso)) {
       const wk = startOfWeek(iso);
       const used = (missesByWeek.get(wk) || 0) + 1;
@@ -94,9 +98,12 @@ export function expectedDays(habit, sinceISO) {
 }
 
 /** Дисциплина: доля выполненного от ожидаемого, 0–100 */
-export function discipline(habit, doneSet, sinceISO) {
-  const expected = expectedDays(habit, sinceISO);
-  if (!expected) return 0;
+export function discipline(habit, doneSet, sinceISO, freezeSet) {
+  let frozen = 0;
+  freezeSet?.forEach((iso) => {
+    if (iso >= sinceISO && iso <= todayISO()) frozen++;
+  });
+  const expected = Math.max(1, expectedDays(habit, sinceISO) - frozen);
   let done = 0;
   doneSet.forEach((iso) => {
     if (iso >= sinceISO) done++;

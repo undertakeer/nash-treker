@@ -83,6 +83,8 @@ export default function Notifications({ open, onClose }) {
             value={p.reminders !== false} onChange={(v) => updatePrefs({ reminders: v })} />
           <Toggle label="Партнёр отметился" hint="Когда вторая половина закрывает общую привычку"
             value={p.partner_checkins !== false} onChange={(v) => updatePrefs({ partner_checkins: v })} />
+          <Toggle label="Партнёр обогнал" hint="Через пару часов после того, как он закрыл общую привычку"
+            value={p.smart_nudge !== false} onChange={(v) => updatePrefs({ smart_nudge: v })} />
           <Toggle label="Стрик под угрозой" hint="Вечером, если привычка ещё не отмечена"
             value={p.streak_risk !== false} onChange={(v) => updatePrefs({ streak_risk: v })} />
           <Toggle label="Подталкивания" hint="Когда партнёр напоминает о вашей привычке"

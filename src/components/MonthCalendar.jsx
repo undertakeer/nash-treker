@@ -3,7 +3,7 @@ import { MONTHS, monthGrid, todayISO } from "../lib/date";
 import { hex, rgba } from "../lib/theme";
 
 export default function MonthCalendar({
-  year, month, doneSet, partnerSet, colorKey = "mint", onPick, onShift, canEdit = true,
+  year, month, doneSet, partnerSet, freezeSet, colorKey = "mint", onPick, onShift, canEdit = true,
 }) {
   const cells = monthGrid(year, month);
   const today = todayISO();
@@ -35,6 +35,7 @@ export default function MonthCalendar({
       <div className="grid grid-cols-7 gap-1.5">
         {cells.map((c) => {
           const mine = doneSet.has(c.iso);
+          const iced = !mine && freezeSet?.has(c.iso);
           const theirs = partnerSet?.has(c.iso);
           const future = c.iso > today;
           const both = mine && theirs;
@@ -54,6 +55,8 @@ export default function MonthCalendar({
                   ? hex(colorKey)
                   : some
                   ? rgba(colorKey, 0.34)
+                  : iced
+                  ? rgba("sky", 0.16)
                   : "rgba(255,255,255,.05)",
                 color: !c.inMonth
                   ? "transparent"
@@ -65,7 +68,7 @@ export default function MonthCalendar({
                 opacity: future ? 0.5 : 1,
               }}
             >
-              {c.day}
+              {iced ? <span className="text-[12px]">🧊</span> : c.day}
               {c.iso === today && (
                 <span
                   className="absolute bottom-1 w-1 h-1 rounded-full"

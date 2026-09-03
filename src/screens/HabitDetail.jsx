@@ -4,6 +4,7 @@ import Sheet from "../components/Sheet";
 import Avatar from "../components/Avatar";
 import MonthCalendar from "../components/MonthCalendar";
 import StatTile from "../components/StatTile";
+import DayCard from "../components/DayCard";
 import { Button, CheckCircle, Progress, Row } from "../components/ui";
 import { useStore } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
@@ -12,7 +13,7 @@ import { bestStreak, discipline, goalProgress, scheduleLabel, streak } from "../
 
 export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
   const {
-    habits, profiles, uid, doneSetFor, toggleCheckin, nudge,
+    habits, profiles, uid, doneSetFor, freezeSetFor, toggleCheckin, nudge,
     completeHabit, archiveHabit, restoreHabit, deleteHabit, updateHabit,
   } = useStore();
 
@@ -35,6 +36,13 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
     participants.forEach((p) => { out[p.id] = doneSetFor(habit.id, p.id); });
     return out;
   }, [participants, habit, doneSetFor]);
+
+  const freezeSets = useMemo(() => {
+    const out = {};
+    if (!habit) return out;
+    participants.forEach((p) => { out[p.id] = freezeSetFor(habit.id, p.id); });
+    return out;
+  }, [participants, habit, freezeSetFor]);
 
   const combined = useMemo(() => {
     if (participants.length < 2) return null;
@@ -60,9 +68,12 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
   const since = (habit.created_at || today).slice(0, 10);
 
   const mainSet = combined || sets[participants[0]?.id] || new Set();
-  const mainStreak = streak(habit, mainSet);
-  const mainDiscipline = discipline(habit, mainSet, since);
-  const record = bestStreak(habit, mainSet, since);
+  const mainFreeze = combined
+    ? new Set([...(freezeSets[participants[0]?.id] || []), ...(freezeSets[participants[1]?.id] || [])])
+    : freezeSets[participants[0]?.id] || new Set();
+  const mainStreak = streak(habit, mainSet, mainFreeze);
+  const mainDiscipline = discipline(habit, mainSet, since, mainFreeze);
+  const record = bestStreak(habit, mainSet, since, mainFreeze);
   const goal = goalProgress(habit, (sets[uid] || new Set()).size);
 
   function handleCheck() {
@@ -199,6 +210,7 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
             month={ym.m}
             doneSet={viewSet}
             partnerSet={null}
+            freezeSet={freezeSets[viewing]}
             colorKey={color}
             onShift={shiftMonth}
             onPick={handleDayPick}
@@ -210,6 +222,8 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
             </div>
           )}
         </div>
+
+        <DayCard habit={habit} day={today} colorKey={color} canEdit={canCheck} />
 
         <div className="rounded-2xl bg-white/5 border border-white/8 divide-y divide-white/6 mb-6">
           {participants.map((p) => {
@@ -232,7 +246,7 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-[14px] font-bold" style={{ color: hex(color) }}>
-                    🔥 {streak(habit, s)}
+                    🔥 {streak(habit, s, freezeSets[p.id])}
                   </span>
                   {!isMe && !didToday && habit.status === "active" && (
                     <button

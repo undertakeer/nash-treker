@@ -7,7 +7,7 @@ import { todayISO } from "../lib/date";
 import { activeMood, moodLabel } from "../lib/moods";
 
 export default function Home({ onOpenHabit, onCreate, onBurst }) {
-  const { habits, profiles, me, partner, uid, doneSetFor, toggleCheckin, loading } = useStore();
+  const { habits, profiles, me, partner, uid, doneSetFor, freezeSetFor, toggleCheckin, loading } = useStore();
   const [tab, setTab] = useState("shared");
   const partnerMood = activeMood(partner);
 
@@ -49,6 +49,12 @@ export default function Home({ onOpenHabit, onCreate, onBurst }) {
   const setsOf = (h) => {
     const out = {};
     participantsOf(h).forEach((p) => { out[p.id] = doneSetFor(h.id, p.id); });
+    return out;
+  };
+
+  const freezesOf = (h) => {
+    const out = {};
+    participantsOf(h).forEach((p) => { out[p.id] = freezeSetFor(h.id, p.id); });
     return out;
   };
 
@@ -124,6 +130,7 @@ export default function Home({ onOpenHabit, onCreate, onBurst }) {
                   featured
                   participants={participantsOf(h)}
                   doneSets={setsOf(h)}
+                  freezeSets={freezesOf(h)}
                   myId={uid}
                   canCheck={h.kind === "shared" || h.owner_id === uid}
                   onOpen={() => onOpenHabit(h.id)}
@@ -140,6 +147,7 @@ export default function Home({ onOpenHabit, onCreate, onBurst }) {
                       habit={h}
                       participants={participantsOf(h)}
                       doneSets={setsOf(h)}
+                      freezeSets={freezesOf(h)}
                       myId={uid}
                       canCheck={h.kind === "shared" || h.owner_id === uid}
                       onOpen={() => onOpenHabit(h.id)}

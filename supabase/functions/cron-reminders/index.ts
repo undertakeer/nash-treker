@@ -82,7 +82,36 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Итоги недели, воскресенье вечером
+    // 3. Умное напоминание: партнёр закрыл общую привычку, вы — нет
+    if (prefs?.smart_nudge !== false && !quiet) {
+      const shared = own.filter((h) => h.kind === "shared" && !doneToday.has(h.id));
+      if (shared.length) {
+        const { data: partnerChecks } = await admin
+          .from("checkins")
+          .select("habit_id, created_at, user_id")
+          .neq("user_id", person.id)
+          .eq("day", date)
+          .in("habit_id", shared.map((h) => h.id));
+
+        for (const check of partnerChecks ?? []) {
+          const ageMin = (Date.now() - new Date(check.created_at).getTime()) / 60000;
+          if (ageMin < 120 || ageMin > 240) continue; // окно: через 2–4 часа после партнёра
+
+          const habit = shared.find((h) => h.id === check.habit_id);
+          if (!habit) continue;
+          if (!(await claim(admin, person.id, "smart_nudge", `${habit.id}:${date}`))) continue;
+
+          sent += await sendToUser(admin, person.id, {
+            title: `${habit.icon} ${habit.title}`,
+            body: "Партнёр уже закрыл — догоняйте",
+            tag: `smart-${habit.id}`,
+            habitId: habit.id,
+          });
+        }
+      }
+    }
+
+    // 4. Итоги недели, воскресенье вечером
     if (prefs?.weekly_summary !== false && isoWeekday === 7 && Math.abs(minutes - 20 * 60) <= WINDOW) {
       const weekStart = new Date(date);
       weekStart.setDate(weekStart.getDate() - 6);
