@@ -168,7 +168,9 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # сборка в dist/
 npm run preview  # посмотреть собранное
+npm run lint     # линтер, включая правила хуков React
 npm run smoke    # проверка: собирается и рисуется без ошибок
+npm run check    # линтер и проверка разом — то же, что гоняет GitHub Actions
 ```
 
 `npm run smoke` собирает приложение, поднимает его в поддельном браузере и

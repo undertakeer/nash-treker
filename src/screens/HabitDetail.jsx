@@ -53,10 +53,10 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
   }, [participants, sets]);
 
   // личную привычку партнёра открываем сразу на его календаре
+  const owner = habit?.kind === "personal" ? habit.owner_id : uid;
   useEffect(() => {
-    if (!habit) return;
-    setViewing(habit.kind === "personal" ? habit.owner_id : uid);
-  }, [habit?.id, habit?.kind, habit?.owner_id, uid]);
+    if (owner) setViewing(owner);
+  }, [owner]);
 
   if (!habit) return null;
 

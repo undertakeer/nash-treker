@@ -4,7 +4,7 @@ import Avatar from "../components/Avatar";
 import { Card } from "../components/ui";
 import { useStore, POINTS_PER_CHECKIN } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
-import { MONTHS, todayISO } from "../lib/date";
+import { MONTHS } from "../lib/date";
 
 export default function MonthSummary({ open, onClose }) {
   const { checkins, habits, profiles, uid, achievements } = useStore();

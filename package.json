@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "smoke": "vite build && node ./smoke.mjs dist && node ./smoke.mjs dist auth"
+    "smoke": "vite build && node ./smoke.mjs dist && node ./smoke.mjs dist auth",
+    "lint": "eslint src",
+    "check": "npm run lint && npm run smoke"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
@@ -16,8 +18,12 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.1.13",
     "@vitejs/plugin-react": "^5.0.2",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.1.13",
     "vite": "^7.1.5"

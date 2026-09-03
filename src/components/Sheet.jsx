@@ -1,7 +1,9 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { useEffect } from "react";
 
 export default function Sheet({ open, onClose, children, tall = false }) {
+  const dragControls = useDragControls();
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -31,13 +33,19 @@ export default function Sheet({ open, onClose, children, tall = false }) {
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 32, stiffness: 340 }}
             drag="y"
+            dragListener={false}
+            dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
             onDragEnd={(_, info) => {
               if (info.offset.y > 130 || info.velocity.y > 700) onClose();
             }}
           >
-            <div className="pt-3 pb-1 grid place-items-center cursor-grab active:cursor-grabbing">
+            <div
+              onPointerDown={(e) => dragControls.start(e)}
+              style={{ touchAction: "none" }}
+              className="pt-3 pb-2 grid place-items-center cursor-grab active:cursor-grabbing"
+            >
               <div className="w-10 h-1 rounded-full bg-white/22" />
             </div>
             <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: "calc(92vh - 20px)" }}>

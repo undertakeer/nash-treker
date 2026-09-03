@@ -20,7 +20,7 @@ const BADGES = {
 export default function Profile({ onOpenNotifications, onOpen }) {
   const {
     me, uid, habits, checkins, achievements, doneSetFor, freezeSetFor,
-    updateProfile, signOut, showToast, restoreHabit, points, photos, session, loadStorageUsage,
+    updateProfile, signOut, restoreHabit, points, photos, session, loadStorageUsage,
   } = useStore();
   const [usage, setUsage] = useState(null);
   const [passwordOpen, setPasswordOpen] = useState(false);

@@ -46,7 +46,9 @@ export function StoreProvider({ children }) {
 
   const uid = session?.user?.id || null;
   const queueRef = useRef(queue);
-  queueRef.current = queue;
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
 
   // ---------- сессия ----------
   useEffect(() => {
@@ -180,8 +182,11 @@ export function StoreProvider({ children }) {
           setEvents((prev) =>
             prev.map((ev) => {
               if (eventType === "DELETE") {
-                return ev.id === old.event_id
-                  ? { ...ev, reactions: (ev.reactions || []).filter((r) => r.id !== old.id) }
+                // в событии удаления приходит только первичный ключ,
+                // поэтому ищем реакцию по её id во всех записях ленты
+                const list = ev.reactions || [];
+                return list.some((r) => r.id === old.id)
+                  ? { ...ev, reactions: list.filter((r) => r.id !== old.id) }
                   : ev;
               }
               if (ev.id !== row.event_id) return ev;
@@ -309,8 +314,11 @@ export function StoreProvider({ children }) {
   }, []);
 
   const awardBadges = useCallback(
-    async (habit) => {
-      const s = streak(habit, doneSetFor(habit.id, uid));
+    async (habit, day) => {
+      // на момент вызова состояние ещё без свежей отметки — добавляем её вручную
+      const set = new Set(doneSetFor(habit.id, uid));
+      if (day) set.add(day);
+      const s = streak(habit, set, freezeSetFor(habit.id, uid));
       const hit = STREAK_BADGES.filter((b) => s === b.days);
       for (const b of hit) {
         const row = { user_id: uid, habit_id: habit.id, code: b.code };
@@ -321,8 +329,14 @@ export function StoreProvider({ children }) {
         if (data && data.length) showToast(`${b.days} дней подряд — «${habit.title}»`, "🏅");
       }
     },
-    [doneSetFor, uid, showToast]
+    [doneSetFor, freezeSetFor, uid, showToast]
   );
+
+  const notifyPartner = useCallback((habit) => {
+    supabase.functions
+      .invoke("notify", { body: { kind: "partner_checkin", habit_id: habit.id } })
+      .catch(() => {});
+  }, []);
 
   const toggleCheckin = useCallback(
     async (habit, day = todayISO()) => {
@@ -359,20 +373,14 @@ export function StoreProvider({ children }) {
             }).then(() => {});
             notifyPartner(habit);
           }
-          setTimeout(() => awardBadges(habit), 200);
+          awardBadges(habit, day);
         }
       } catch {
         setQueue((q) => [...q, { op: has ? "del" : "add", habit_id: habit.id, day }]);
       }
     },
-    [uid, isDone, awardBadges, checkins, dropPhotoFiles]
+    [uid, isDone, awardBadges, checkins, dropPhotoFiles, notifyPartner]
   );
-
-  const notifyPartner = useCallback((habit) => {
-    supabase.functions
-      .invoke("notify", { body: { kind: "partner_checkin", habit_id: habit.id } })
-      .catch(() => {});
-  }, []);
 
   const nudge = useCallback(
     async (habit, targetId) => {
@@ -581,22 +589,25 @@ export function StoreProvider({ children }) {
     [uid, checkins, dropPhotoFiles, showToast]
   );
 
+  /** Заметка только дополняет уже сделанную отметку и никогда её не создаёт:
+      иначе печать в поле молча закрывала бы день. */
   const setNote = useCallback(
     async (habit, day, note) => {
       const value = note?.trim() || null;
+      const key = ckKey(habit.id, uid, day);
+      if (!checkins.some((c) => ckKey(c.habit_id, c.user_id, c.day) === key)) return false;
+      setCheckins((prev) =>
+        prev.map((c) =>
+          ckKey(c.habit_id, c.user_id, c.day) === key ? { ...c, note: value } : c
+        )
+      );
       await supabase
         .from("checkins")
-        .upsert({ habit_id: habit.id, user_id: uid, day, note: value });
-      setCheckins((prev) => {
-        const key = ckKey(habit.id, uid, day);
-        const i = prev.findIndex((c) => ckKey(c.habit_id, c.user_id, c.day) === key);
-        if (i === -1) return [...prev, { habit_id: habit.id, user_id: uid, day, note: value }];
-        const next = prev.slice();
-        next[i] = { ...next[i], note: value };
-        return next;
-      });
+        .update({ note: value })
+        .match({ habit_id: habit.id, user_id: uid, day });
+      return true;
     },
-    [uid]
+    [uid, checkins]
   );
 
   // ---------- заморозка стрика ----------

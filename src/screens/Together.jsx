@@ -58,8 +58,15 @@ export default function Together({ onOpen }) {
     return { total: shared.length, both: both.length };
   }, [active, profiles, doneSetFor, today]);
 
-  const leader = perPerson.slice().sort((a, b) => b.percent - a.percent)[0];
-  const tie = perPerson.length === 2 && perPerson[0].percent === perPerson[1].percent;
+  const ranked = perPerson.slice().sort((a, b) => b.percent - a.percent);
+  const leader = ranked[0];
+  const tie = ranked.length > 1 && ranked.every((r) => r.percent === ranked[0].percent);
+  const weekLabel =
+    !leader || leader.percent === 0
+      ? "неделя только началась"
+      : tie
+      ? "ничья"
+      : `впереди ${leader.profile.display_name || "…"}`;
 
   const feed = useMemo(() => events.filter((e) => e.type !== "nudge" || e.actor_id === uid), [events, uid]);
 
@@ -140,7 +147,7 @@ export default function Together({ onOpen }) {
         <div className="flex items-center justify-between mb-4">
           <div className="text-[15px] font-bold">Эта неделя</div>
           <div className="text-[12.5px] text-white/35">
-            {tie ? "ничья" : leader ? `впереди ${leader.profile.display_name || "…"}` : ""}
+            {weekLabel}
           </div>
         </div>
 

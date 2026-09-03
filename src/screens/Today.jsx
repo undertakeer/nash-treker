@@ -8,7 +8,7 @@ import { MONTHS_GEN, WEEKDAY_LONG, isoWeekday, todayISO } from "../lib/date";
 import { isScheduled, scheduleLabel, streak } from "../lib/stats";
 
 export default function Today({ onOpenHabit, onBurst }) {
-  const { habits, profiles, uid, partner, doneSetFor, freezeSetFor, toggleCheckin } = useStore();
+  const { habits, uid, partner, doneSetFor, freezeSetFor, toggleCheckin } = useStore();
   const today = todayISO();
   const [showDone, setShowDone] = useState(false);
 

@@ -84,12 +84,14 @@ export default function DayCard({ habit, day, colorKey = "mint", canEdit }) {
       <div className="px-4 pb-3">
         <input
           value={note}
+          disabled={!row}
           onChange={(e) => setLocalNote(e.target.value.slice(0, 140))}
           onBlur={() => note.trim() !== (row?.note || "") && setNote(habit, day, note)}
-          placeholder="Заметка к дню — увидит партнёр"
+          placeholder={row ? "Заметка к дню — увидит партнёр" : "Отметьте день, чтобы оставить заметку"}
           maxLength={140}
           className="w-full px-3.5 py-2.5 rounded-xl bg-white/6 border border-white/10 outline-none
-                     text-[14px] placeholder:text-white/25 focus:border-white/25"
+                     text-[14px] placeholder:text-white/25 focus:border-white/25
+                     disabled:opacity-45 disabled:cursor-not-allowed"
         />
       </div>
 

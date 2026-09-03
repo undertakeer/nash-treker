@@ -37,7 +37,7 @@ export function useAvatarUpload() {
         setUploading(false);
       }
     },
-    [uid, me?.avatar_url, updateProfile, showToast]
+    [uid, me, updateProfile, showToast]
   );
 
   const pick = useCallback(() => inputRef.current?.click(), []);
