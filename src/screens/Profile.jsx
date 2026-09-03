@@ -27,6 +27,7 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const fileRef = useRef(null);
   const [name, setName] = useState(me?.display_name || "");
+  const nameFocused = useRef(false);
   const [uploading, setUploading] = useState(false);
 
   const mine = useMemo(() => checkins.filter((c) => c.user_id === uid), [checkins, uid]);
@@ -87,6 +88,10 @@ export default function Profile({ onOpenNotifications, onOpen }) {
     const to = new Date().getFullYear();
     return Array.from({ length: to - from + 1 }, (_, i) => to - i);
   }, [mine]);
+
+  useEffect(() => {
+    if (!nameFocused.current) setName(me?.display_name || "");
+  }, [me?.display_name]);
 
   useEffect(() => {
     let alive = true;
@@ -248,7 +253,12 @@ export default function Profile({ onOpenNotifications, onOpen }) {
               <TextInput
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                onBlur={() => name.trim() !== me?.display_name && updateProfile({ display_name: name.trim() })}
+                onFocus={() => { nameFocused.current = true; }}
+                onBlur={() => {
+                  nameFocused.current = false;
+                  const next = name.trim();
+                  if (next && next !== (me?.display_name || "")) updateProfile({ display_name: next });
+                }}
                 placeholder="Как вас зовут"
                 maxLength={30}
               />

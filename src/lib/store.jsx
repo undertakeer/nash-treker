@@ -4,6 +4,7 @@ import {
 import { supabase } from "./supabase";
 import { readCache, writeCache } from "./cache";
 import { todayISO } from "./date";
+import { emailToLogin } from "./auth";
 import { pathFromPublicUrl, photoVariants } from "./image";
 import { streak } from "./stats";
 
@@ -94,7 +95,22 @@ export function StoreProvider({ children }) {
       supabase.from("purchases").select("*").order("created_at", { ascending: false }).limit(60),
       supabase.from("goals").select("*").order("created_at", { ascending: false }),
     ]);
-    if (!p.error) setProfiles(p.data || []);
+    let people = p.error ? [] : p.data || [];
+
+    // строки профиля может не быть, если аккаунт завели в обход триггера
+    if (!p.error && !people.some((x) => x.id === uid)) {
+      const fallback = emailToLogin(session?.user?.email) || "";
+      const { data: created } = await supabase
+        .from("profiles")
+        .upsert({ id: uid, display_name: fallback }, { onConflict: "id" })
+        .select()
+        .single();
+      if (created) people = [...people, created];
+      await supabase
+        .from("notification_prefs")
+        .upsert({ user_id: uid }, { onConflict: "user_id", ignoreDuplicates: true });
+    }
+    setProfiles(people);
     if (!h.error) setHabits(h.data || []);
     if (!c.error) setCheckins(c.data || []);
     if (!e.error) setEvents(e.data || []);
@@ -105,7 +121,7 @@ export function StoreProvider({ children }) {
     if (!pu.error) setPurchases(pu.data || []);
     if (!g.error) setGoals(g.data || []);
     setLoading(false);
-  }, [uid]);
+  }, [uid, session]);
 
   useEffect(() => {
     if (session === undefined) return;
@@ -454,9 +470,21 @@ export function StoreProvider({ children }) {
 
   const updateProfile = useCallback(
     async (patch) => {
-      setProfiles((prev) => prev.map((p) => (p.id === uid ? { ...p, ...patch } : p)));
-      const { error } = await supabase.from("profiles").update(patch).eq("id", uid);
-      if (error) showToast("Не удалось сохранить профиль", "⚠️");
+      setProfiles((prev) =>
+        prev.some((p) => p.id === uid)
+          ? prev.map((p) => (p.id === uid ? { ...p, ...patch } : p))
+          : [...prev, { id: uid, ...patch }]
+      );
+      const { data, error } = await supabase
+        .from("profiles")
+        .upsert({ id: uid, ...patch }, { onConflict: "id" })
+        .select()
+        .single();
+      if (error) {
+        showToast("Не удалось сохранить профиль", "⚠️");
+        return;
+      }
+      if (data) setProfiles((prev) => prev.map((p) => (p.id === uid ? { ...p, ...data } : p)));
     },
     [uid, showToast]
   );
