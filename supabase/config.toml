@@ -1,0 +1,10 @@
+# Настройки на случай работы через Supabase CLI.
+# Через веб-панель то же самое задаётся переключателем «Verify JWT».
+
+project_id = "fprakrtvlyrbojiojsdo"
+
+[functions.notify]
+verify_jwt = true
+
+[functions.cron-reminders]
+verify_jwt = false
