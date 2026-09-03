@@ -54,7 +54,7 @@ export default function Auth() {
               spellCheck={false}
               value={login}
               onChange={(e) => setLogin(e.target.value)}
-              placeholder="например, vlad"
+              placeholder="ваш логин"
               required
             />
           </Field>
