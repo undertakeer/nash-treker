@@ -144,17 +144,18 @@ Safari.
 ### 5. Выкладка
 
 ```bash
-git remote add origin https://github.com/ВАШ_ЛОГИН/nash-treker.git
-git branch -M main
-git push -u origin main
+git push        # репозиторий уже подключён: github.com/undertakeer/nash-treker
 ```
 
-GitHub → **Settings → Pages → Source: GitHub Actions**. Сборка запустится сама,
-через пару минут адрес будет вида `https://ВАШ_ЛОГИН.github.io/nash-treker/`.
+GitHub → **Settings → Pages → Source: GitHub Actions**. Сборка запускается сама
+при каждом пуше в `main`.
+
+Живой адрес: **https://undertakeer.github.io/nash-treker/**
 
 ### 6. На айфоны
 
-1. Открыть адрес **в Safari** (Chrome на iOS так не умеет).
+1. Открыть **https://undertakeer.github.io/nash-treker/** в **Safari**
+   (Chrome на iOS ставить на домашний экран не умеет).
 2. «Поделиться» → **На экран «Домой»** → Добавить.
 3. Запустить с домашнего экрана, войти.
 4. Профиль → Уведомления → Включить.
