@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Avatar from "../components/Avatar";
-import { Button, Card, Empty, Field, Row, TextInput } from "../components/ui";
+import { Button, Card, Empty, Row } from "../components/ui";
 import MoodPicker from "../components/MoodPicker";
 import Password from "./Password";
+import EditProfile from "./EditProfile";
 import { emailToLogin } from "../lib/auth";
 import { useStore } from "../lib/store";
-import { supabase } from "../lib/supabase";
-import { squareThumb } from "../lib/image";
-import { COLOR_KEYS, COLORS, hex, rgba } from "../lib/theme";
+import { hex, rgba } from "../lib/theme";
 import { addDays, days, humanDateFull, isoWeekday, todayISO } from "../lib/date";
 import { bestStreak, streak } from "../lib/stats";
 
@@ -25,10 +24,7 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   } = useStore();
   const [usage, setUsage] = useState(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const fileRef = useRef(null);
-  const [name, setName] = useState(me?.display_name || "");
-  const nameFocused = useRef(false);
-  const [uploading, setUploading] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const mine = useMemo(() => checkins.filter((c) => c.user_id === uid), [checkins, uid]);
 
@@ -90,36 +86,10 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   }, [mine]);
 
   useEffect(() => {
-    if (!nameFocused.current) setName(me?.display_name || "");
-  }, [me?.display_name]);
-
-  useEffect(() => {
     let alive = true;
     loadStorageUsage().then((u) => { if (alive) setUsage(u); });
     return () => { alive = false; };
   }, [loadStorageUsage, photos.length]);
-
-  async function pickAvatar(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploading(true);
-    try {
-      const blob = await squareThumb(file);
-      const path = `${uid}/avatar-${Date.now()}.jpg`;
-      const { error } = await supabase.storage
-        .from("avatars")
-        .upload(path, blob, { contentType: "image/jpeg", upsert: true });
-      if (error) throw error;
-      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-      await updateProfile({ avatar_url: data.publicUrl });
-      showToast("Аватарка обновлена", "📸");
-    } catch (err) {
-      showToast(err.message || "Не удалось загрузить фото", "⚠️");
-    } finally {
-      setUploading(false);
-    }
-  }
 
   const accent = me?.accent || "mint";
 
@@ -130,21 +100,27 @@ export default function Profile({ onOpenNotifications, onOpen }) {
       </header>
 
       <div className="flex items-center gap-4 mb-7">
-        <button onClick={() => fileRef.current?.click()} className="press relative shrink-0">
+        <button onClick={() => setEditOpen(true)} className="press relative shrink-0">
           <Avatar profile={me} size={78} ring />
           <span
             className="absolute -bottom-0.5 -right-0.5 w-7 h-7 rounded-full grid place-items-center text-[13px]"
             style={{ background: hex(accent), color: "#0A0A0E", boxShadow: "0 0 0 3px #08080B" }}
           >
-            {uploading ? "…" : "📷"}
+            ✏️
           </span>
         </button>
-        <input ref={fileRef} type="file" accept="image/*" onChange={pickAvatar} className="hidden" />
         <div className="min-w-0 flex-1">
           <div className="text-[21px] font-extrabold truncate">{me?.display_name || "Без имени"}</div>
           <div className="text-[13.5px] text-white/40">
             {days(stats.daysWithUs)} в трекере · {stats.checkins} отметок
           </div>
+          <button
+            onClick={() => setEditOpen(true)}
+            className="press text-[13px] font-semibold mt-1"
+            style={{ color: hex(accent) }}
+          >
+            Редактировать профиль
+          </button>
         </div>
       </div>
 
@@ -248,58 +224,20 @@ export default function Profile({ onOpenNotifications, onOpen }) {
 
       <Section title="Настройки">
         <Card className="divide-y divide-white/6">
-          <div className="px-4 py-3.5">
-            <Field label="Имя">
-              <TextInput
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onFocus={() => { nameFocused.current = true; }}
-                onBlur={() => {
-                  nameFocused.current = false;
-                  const next = name.trim();
-                  if (next && next !== (me?.display_name || "")) updateProfile({ display_name: next });
-                }}
-                placeholder="Как вас зовут"
-                maxLength={30}
-              />
-            </Field>
-          </div>
-          <div className="px-4 py-3.5">
-            <div className="text-[13px] font-semibold text-white/45 mb-2.5">Запасная аватарка</div>
-            <div className="flex flex-wrap gap-2">
-              {["🙂","😎","🥰","🦊","🐻","🐱","🐼","🦁","🌚","👻","🤖","🐧"].map((e) => (
-                <button
-                  key={e}
-                  onClick={() => updateProfile({ emoji: e })}
-                  className="w-10 h-10 rounded-xl grid place-items-center text-[19px] press"
-                  style={{
-                    background: me?.emoji === e ? rgba(accent, 0.26) : "rgba(255,255,255,.05)",
-                    border: `1px solid ${me?.emoji === e ? rgba(accent, 0.45) : "transparent"}`,
-                  }}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="px-4 py-3.5">
-            <div className="text-[13px] font-semibold text-white/45 mb-2.5">Мой цвет</div>
-            <div className="flex flex-wrap gap-2.5">
-              {COLOR_KEYS.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => updateProfile({ accent: k })}
-                  className="w-8 h-8 rounded-full press"
-                  style={{
-                    background: hex(k),
-                    boxShadow: accent === k ? `0 0 0 2.5px #08080B, 0 0 0 4.5px ${hex(k)}` : "none",
-                  }}
-                  aria-label={COLORS[k].label}
-                />
-              ))}
-            </div>
-          </div>
-          <Row icon="🔔" title="Уведомления" subtitle="Напоминания и пуши" onClick={onOpenNotifications} right={<span className="text-white/25">›</span>} />
+          <Row
+            icon="👤"
+            title="Редактировать профиль"
+            subtitle="Фото, имя, цвет"
+            onClick={() => setEditOpen(true)}
+            right={<span className="text-white/25">›</span>}
+          />
+          <Row
+            icon="🔔"
+            title="Уведомления"
+            subtitle="Напоминания и пуши"
+            onClick={onOpenNotifications}
+            right={<span className="text-white/25">›</span>}
+          />
           <Row
             icon="🔑"
             title="Сменить пароль"
@@ -378,6 +316,7 @@ export default function Profile({ onOpenNotifications, onOpen }) {
         <Button variant="danger" onClick={signOut}>Выйти</Button>
       </div>
 
+      <EditProfile open={editOpen} onClose={() => setEditOpen(false)} />
       <Password open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </div>
   );

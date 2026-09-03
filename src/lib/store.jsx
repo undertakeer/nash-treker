@@ -95,10 +95,11 @@ export function StoreProvider({ children }) {
       supabase.from("purchases").select("*").order("created_at", { ascending: false }).limit(60),
       supabase.from("goals").select("*").order("created_at", { ascending: false }),
     ]);
-    let people = p.error ? [] : p.data || [];
+    // при ошибке сети оставляем то, что уже лежит в кэше
+    let people = p.error ? null : p.data || [];
 
     // строки профиля может не быть, если аккаунт завели в обход триггера
-    if (!p.error && !people.some((x) => x.id === uid)) {
+    if (people && !people.some((x) => x.id === uid)) {
       const fallback = emailToLogin(session?.user?.email) || "";
       const { data: created } = await supabase
         .from("profiles")
@@ -110,7 +111,7 @@ export function StoreProvider({ children }) {
         .from("notification_prefs")
         .upsert({ user_id: uid }, { onConflict: "user_id", ignoreDuplicates: true });
     }
-    setProfiles(people);
+    if (people) setProfiles(people);
     if (!h.error) setHabits(h.data || []);
     if (!c.error) setCheckins(c.data || []);
     if (!e.error) setEvents(e.data || []);
