@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "../lib/supabase";
+import { isValidLogin, loginToEmail } from "../lib/auth";
 import { Button, Field, TextInput } from "../components/ui";
 
 export default function Auth() {
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -14,13 +15,13 @@ export default function Auth() {
     setBusy(true);
     setError("");
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: loginToEmail(login),
       password,
     });
     if (error) {
       setError(
         error.message.includes("Invalid login")
-          ? "Неверная почта или пароль"
+          ? "Неверный логин или пароль"
           : error.message.includes("Email not confirmed")
           ? "Аккаунт не подтверждён. В Supabase включите Auto Confirm для пользователя."
           : error.message
@@ -43,15 +44,17 @@ export default function Auth() {
         <p className="text-white/40 text-[15px] mb-9">Привычки на двоих</p>
 
         <form onSubmit={submit} className="space-y-4">
-          <Field label="Почта">
+          <Field label="Логин">
             <TextInput
-              type="email"
-              inputMode="email"
+              type="text"
+              inputMode="text"
               autoComplete="username"
               autoCapitalize="none"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              autoCorrect="off"
+              spellCheck={false}
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="например, vlad"
               required
             />
           </Field>
@@ -72,13 +75,14 @@ export default function Auth() {
             </div>
           )}
 
-          <Button type="submit" disabled={busy || !email || !password}>
+          <Button type="submit" disabled={busy || !isValidLogin(login) || !password}>
             {busy ? "Входим…" : "Войти"}
           </Button>
         </form>
 
         <p className="text-[12.5px] text-white/25 mt-7 leading-relaxed">
-          Регистрация закрыта. Аккаунты создаются вручную в панели Supabase.
+          Регистрация закрыта — вход только по выданному логину и паролю.
+          Пароль меняется внутри приложения, в профиле.
         </p>
       </motion.div>
     </div>

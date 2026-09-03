@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import Avatar from "../components/Avatar";
 import { Button, Card, Empty, Field, Row, TextInput } from "../components/ui";
 import MoodPicker from "../components/MoodPicker";
+import Password from "./Password";
+import { emailToLogin } from "../lib/auth";
 import { useStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
 import { squareThumb } from "../lib/image";
@@ -19,8 +21,9 @@ const BADGES = {
 export default function Profile({ onOpenNotifications, onOpen }) {
   const {
     me, uid, habits, checkins, achievements, doneSetFor, freezeSetFor,
-    updateProfile, signOut, showToast, restoreHabit, points, photos,
+    updateProfile, signOut, showToast, restoreHabit, points, photos, session,
   } = useStore();
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const fileRef = useRef(null);
   const [name, setName] = useState(me?.display_name || "");
   const [uploading, setUploading] = useState(false);
@@ -248,6 +251,13 @@ export default function Profile({ onOpenNotifications, onOpen }) {
             </div>
           </div>
           <Row icon="🔔" title="Уведомления" subtitle="Напоминания и пуши" onClick={onOpenNotifications} right={<span className="text-white/25">›</span>} />
+          <Row
+            icon="🔑"
+            title="Сменить пароль"
+            subtitle={`Логин: ${emailToLogin(session?.user?.email)}`}
+            onClick={() => setPasswordOpen(true)}
+            right={<span className="text-white/25">›</span>}
+          />
         </Card>
       </Section>
 
@@ -318,6 +328,8 @@ export default function Profile({ onOpenNotifications, onOpen }) {
       <div className="mt-8">
         <Button variant="danger" onClick={signOut}>Выйти</Button>
       </div>
+
+      <Password open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </div>
   );
 }
