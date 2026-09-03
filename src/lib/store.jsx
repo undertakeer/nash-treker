@@ -282,6 +282,15 @@ export function StoreProvider({ children }) {
     setTimeout(() => setToast(null), 2600);
   }, []);
 
+  /** Удаляет файлы отметки из хранилища, чтобы они не копились мусором */
+  const dropPhotoFiles = useCallback(async (row) => {
+    const paths = [
+      pathFromPublicUrl(row?.photo_url, "moments"),
+      pathFromPublicUrl(row?.thumb_url, "moments"),
+    ].filter(Boolean);
+    if (paths.length) await supabase.storage.from("moments").remove(paths);
+  }, []);
+
   const awardBadges = useCallback(
     async (habit) => {
       const s = streak(habit, doneSetFor(habit.id, uid));
@@ -477,15 +486,6 @@ export function StoreProvider({ children }) {
   );
 
   // ---------- фотоотчёты и заметки ----------
-  /** Удаляет файлы отметки из хранилища, чтобы они не копились мусором */
-  const dropPhotoFiles = useCallback(async (row) => {
-    const paths = [
-      pathFromPublicUrl(row?.photo_url, "moments"),
-      pathFromPublicUrl(row?.thumb_url, "moments"),
-    ].filter(Boolean);
-    if (paths.length) await supabase.storage.from("moments").remove(paths);
-  }, []);
-
   const attachPhoto = useCallback(
     async (habit, day, file) => {
       if (!uid) return;
