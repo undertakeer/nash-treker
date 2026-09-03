@@ -7,7 +7,7 @@ import { hex, rgba } from "../lib/theme";
 import { relativeDay, todayISO, weekDays, WEEKDAY_SHORT } from "../lib/date";
 import { isScheduled } from "../lib/stats";
 import { activeMood, moodAge, moodLabel } from "../lib/moods";
-import { goalProgressDays } from "./Goals";
+import { goalProgressDays } from "../lib/goals";
 
 const REACTIONS = ["❤️", "🔥", "👏", "😍"];
 
