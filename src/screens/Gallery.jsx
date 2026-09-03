@@ -87,7 +87,13 @@ export default function Gallery({ open, onClose }) {
                       onClick={() => setActive(c)}
                       className="relative aspect-square rounded-xl overflow-hidden bg-white/5"
                     >
-                      <img src={c.photo_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      <img
+                        src={c.thumb_url || c.photo_url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                      />
                       <span
                         className="absolute left-1 bottom-1 text-[13px] w-6 h-6 rounded-lg grid place-items-center"
                         style={{ background: "rgba(0,0,0,.55)" }}

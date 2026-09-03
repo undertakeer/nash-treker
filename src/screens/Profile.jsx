@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../components/Avatar";
 import { Button, Card, Empty, Field, Row, TextInput } from "../components/ui";
 import MoodPicker from "../components/MoodPicker";
@@ -21,8 +21,9 @@ const BADGES = {
 export default function Profile({ onOpenNotifications, onOpen }) {
   const {
     me, uid, habits, checkins, achievements, doneSetFor, freezeSetFor,
-    updateProfile, signOut, showToast, restoreHabit, points, photos, session,
+    updateProfile, signOut, showToast, restoreHabit, points, photos, session, loadStorageUsage,
   } = useStore();
+  const [usage, setUsage] = useState(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const fileRef = useRef(null);
   const [name, setName] = useState(me?.display_name || "");
@@ -86,6 +87,12 @@ export default function Profile({ onOpenNotifications, onOpen }) {
     const to = new Date().getFullYear();
     return Array.from({ length: to - from + 1 }, (_, i) => to - i);
   }, [mine]);
+
+  useEffect(() => {
+    let alive = true;
+    loadStorageUsage().then((u) => { if (alive) setUsage(u); });
+    return () => { alive = false; };
+  }, [loadStorageUsage, photos.length]);
 
   async function pickAvatar(e) {
     const file = e.target.files?.[0];
@@ -201,6 +208,38 @@ export default function Profile({ onOpenNotifications, onOpen }) {
         <Quick emoji="📸" value={photos.length} label="Фото" onClick={() => onOpen("gallery")} color="violet" />
         <Quick emoji="📊" value="" label="Итоги" onClick={() => onOpen("summary")} color="sky" />
       </div>
+
+      {usage && (
+        <Section title="Место в облаке">
+          <Card className="p-4">
+            <div className="flex items-baseline justify-between mb-2.5">
+              <div className="text-[15px] font-bold">
+                {formatMB(usage.bytes)} <span className="text-white/30 font-medium">из 1024 МБ</span>
+              </div>
+              <div className="text-[13px] font-bold" style={{ color: usageColor(usage.bytes) }}>
+                {Math.min(100, Math.round((usage.bytes / (1024 * 1024 * 1024)) * 100))}%
+              </div>
+            </div>
+            <div className="h-2 rounded-full bg-white/8 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min(100, (usage.bytes / (1024 * 1024 * 1024)) * 100)}%`,
+                  background: usageColor(usage.bytes),
+                }}
+              />
+            </div>
+            <div className="text-[12.5px] text-white/35 mt-2.5 leading-relaxed">
+              {usage.files} файлов · {photos.length} фотоотчётов.
+              {usage.bytes > 0 && (
+                <> Хватит примерно ещё на {Math.max(0, Math.round(
+                  (1024 * 1024 * 1024 - usage.bytes) / Math.max(1, usage.bytes / Math.max(1, usage.files))
+                ))} снимков.</>
+              )}
+            </div>
+          </Card>
+        </Section>
+      )}
 
       <Section title="Настройки">
         <Card className="divide-y divide-white/6">
@@ -374,4 +413,16 @@ function Quick({ emoji, value, label, onClick, color }) {
       <span className="text-[11.5px] font-semibold text-white/50">{label}</span>
     </button>
   );
+}
+
+function formatMB(bytes) {
+  const mb = bytes / (1024 * 1024);
+  return mb < 10 ? `${mb.toFixed(1)} МБ` : `${Math.round(mb)} МБ`;
+}
+
+function usageColor(bytes) {
+  const share = bytes / (1024 * 1024 * 1024);
+  if (share > 0.9) return hex("rose");
+  if (share > 0.7) return hex("amber");
+  return hex("mint");
 }

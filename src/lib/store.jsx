@@ -4,7 +4,7 @@ import {
 import { supabase } from "./supabase";
 import { readCache, writeCache } from "./cache";
 import { todayISO } from "./date";
-import { fitThumb } from "./image";
+import { pathFromPublicUrl, photoVariants } from "./image";
 import { streak } from "./stats";
 
 const Ctx = createContext(null);
@@ -303,6 +303,9 @@ export function StoreProvider({ children }) {
       if (!uid) return;
       const has = isDone(habit.id, uid, day);
       const key = ckKey(habit.id, uid, day);
+      const existing = checkins.find(
+        (c) => c.habit_id === habit.id && c.user_id === uid && c.day === day
+      );
 
       // оптимистично
       setCheckins((prev) =>
@@ -320,6 +323,7 @@ export function StoreProvider({ children }) {
       try {
         if (has) {
           await supabase.from("checkins").delete().match({ habit_id: habit.id, user_id: uid, day });
+          if (existing?.photo_url) dropPhotoFiles(existing);
         } else {
           await supabase.from("checkins").upsert({ habit_id: habit.id, user_id: uid, day });
           if (day === todayISO()) {
@@ -335,7 +339,7 @@ export function StoreProvider({ children }) {
         setQueue((q) => [...q, { op: has ? "del" : "add", habit_id: habit.id, day }]);
       }
     },
-    [uid, isDone, awardBadges]
+    [uid, isDone, awardBadges, checkins, dropPhotoFiles]
   );
 
   const notifyPartner = useCallback((habit) => {
@@ -388,12 +392,14 @@ export function StoreProvider({ children }) {
 
   const deleteHabit = useCallback(
     async (id) => {
+      const own = checkins.filter((c) => c.habit_id === id && c.user_id === uid && c.photo_url);
       setHabits((prev) => prev.filter((h) => h.id !== id));
       setCheckins((prev) => prev.filter((c) => c.habit_id !== id));
       await supabase.from("habits").delete().eq("id", id);
+      for (const row of own) await dropPhotoFiles(row);
       showToast("Привычка удалена", "🗑");
     },
-    [showToast]
+    [checkins, uid, dropPhotoFiles, showToast]
   );
 
   const completeHabit = useCallback(
@@ -471,23 +477,44 @@ export function StoreProvider({ children }) {
   );
 
   // ---------- фотоотчёты и заметки ----------
+  /** Удаляет файлы отметки из хранилища, чтобы они не копились мусором */
+  const dropPhotoFiles = useCallback(async (row) => {
+    const paths = [
+      pathFromPublicUrl(row?.photo_url, "moments"),
+      pathFromPublicUrl(row?.thumb_url, "moments"),
+    ].filter(Boolean);
+    if (paths.length) await supabase.storage.from("moments").remove(paths);
+  }, []);
+
   const attachPhoto = useCallback(
     async (habit, day, file) => {
       if (!uid) return;
-      const blob = await fitThumb(file);
-      const path = `${uid}/${habit.id}/${day}-${Date.now()}.jpg`;
-      const { error: upErr } = await supabase.storage
-        .from("moments")
-        .upload(path, blob, { contentType: "image/jpeg", upsert: true });
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("moments").getPublicUrl(path);
+      const prev = checkins.find(
+        (c) => c.habit_id === habit.id && c.user_id === uid && c.day === day
+      );
+      const { full, thumb, type, ext } = await photoVariants(file);
+      const stamp = Date.now();
+      const base = `${uid}/${habit.id}/${day}-${stamp}`;
+
+      const [up1, up2] = await Promise.all([
+        supabase.storage.from("moments").upload(`${base}.${ext}`, full, { contentType: type, upsert: true }),
+        supabase.storage.from("moments").upload(`${base}-s.${ext}`, thumb, { contentType: type, upsert: true }),
+      ]);
+      if (up1.error) throw up1.error;
+      if (up2.error) throw up2.error;
+
+      const photoUrl = supabase.storage.from("moments").getPublicUrl(`${base}.${ext}`).data.publicUrl;
+      const thumbUrl = supabase.storage.from("moments").getPublicUrl(`${base}-s.${ext}`).data.publicUrl;
 
       const { data: row, error } = await supabase
         .from("checkins")
-        .upsert({ habit_id: habit.id, user_id: uid, day, photo_url: data.publicUrl })
+        .upsert({ habit_id: habit.id, user_id: uid, day, photo_url: photoUrl, thumb_url: thumbUrl })
         .select()
         .single();
       if (error) throw error;
+
+      // старый снимок этого дня больше не нужен
+      if (prev?.photo_url) dropPhotoFiles(prev);
 
       setCheckins((prev) => {
         const key = ckKey(habit.id, uid, day);
@@ -500,25 +527,29 @@ export function StoreProvider({ children }) {
       showToast("Фото добавлено", "📸");
       return row;
     },
-    [uid, showToast]
+    [uid, checkins, dropPhotoFiles, showToast]
   );
 
   const removePhoto = useCallback(
     async (habit, day) => {
+      const row = checkins.find(
+        (c) => c.habit_id === habit.id && c.user_id === uid && c.day === day
+      );
       await supabase
         .from("checkins")
-        .update({ photo_url: null })
+        .update({ photo_url: null, thumb_url: null })
         .match({ habit_id: habit.id, user_id: uid, day });
       setCheckins((prev) =>
         prev.map((c) =>
           c.habit_id === habit.id && c.user_id === uid && c.day === day
-            ? { ...c, photo_url: null }
+            ? { ...c, photo_url: null, thumb_url: null }
             : c
         )
       );
+      dropPhotoFiles(row);
       showToast("Фото удалено", "🗑");
     },
-    [uid, showToast]
+    [uid, checkins, dropPhotoFiles, showToast]
   );
 
   const setNote = useCallback(
@@ -677,6 +708,16 @@ export function StoreProvider({ children }) {
     await supabase.from("goals").delete().eq("id", id);
   }, []);
 
+  const loadStorageUsage = useCallback(async () => {
+    const { data, error } = await supabase.rpc("storage_usage");
+    if (error) return null;
+    const total = (data || []).reduce(
+      (acc, r) => ({ bytes: acc.bytes + Number(r.bytes || 0), files: acc.files + Number(r.files || 0) }),
+      { bytes: 0, files: 0 }
+    );
+    return { ...total, byBucket: data || [] };
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
@@ -691,7 +732,7 @@ export function StoreProvider({ children }) {
     isDone, doneSetFor, freezeSetFor, checkinFor,
     toggleCheckin, nudge, react,
     createHabit, updateHabit, deleteHabit, completeHabit, archiveHabit, restoreHabit, reorderHabits,
-    attachPhoto, removePhoto, setNote,
+    attachPhoto, removePhoto, setNote, loadStorageUsage,
     freezeDay, unfreezeDay,
     createWish, updateWish, deleteWish, buyWish, markPurchaseDone, cancelPurchase,
     createGoal, completeGoal, deleteGoal,

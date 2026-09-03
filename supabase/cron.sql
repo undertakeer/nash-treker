@@ -37,7 +37,10 @@ where exists (select 1 from cron.job where jobname = 'nash-treker-cleanup');
 select cron.schedule(
   'nash-treker-cleanup',
   '17 3 * * *',
-  $$ delete from public.notification_log where sent_at < now() - interval '30 days' $$
+  $$
+  delete from public.notification_log where sent_at < now() - interval '30 days';
+  delete from public.events           where created_at < now() - interval '90 days';
+  $$
 );
 
 -- Посмотреть расписание:        select * from cron.job;
