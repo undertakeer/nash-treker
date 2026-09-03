@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import Avatar from "../components/Avatar";
 import { Button, Card, Empty, Field, Row, TextInput } from "../components/ui";
+import MoodPicker from "../components/MoodPicker";
 import { useStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
 import { squareThumb } from "../lib/image";
@@ -114,6 +115,10 @@ export default function Profile({ onOpenNotifications }) {
           </div>
         </div>
       </div>
+
+      <Card className="p-4 mb-3">
+        <MoodPicker profile={me} accent={accent} onChange={updateProfile} />
+      </Card>
 
       <div className="grid grid-cols-2 gap-2.5 mb-3">
         <Stat value={stats.active} label="Активных" glyph="⚡️" accent={accent} />

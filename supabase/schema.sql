@@ -24,6 +24,9 @@ create table public.profiles (
   avatar_url  text,
   emoji       text not null default '🙂',
   accent      text not null default 'mint',
+  mood        text,
+  mood_text   text,
+  mood_at     timestamptz,
   timezone    text not null default 'Asia/Tashkent',
   created_at  timestamptz not null default now()
 );

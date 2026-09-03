@@ -6,6 +6,7 @@ import { useStore } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
 import { relativeDay, todayISO, weekDays, WEEKDAY_SHORT } from "../lib/date";
 import { isScheduled } from "../lib/stats";
+import { activeMood, moodAge, moodLabel } from "../lib/moods";
 
 const REACTIONS = ["❤️", "🔥", "👏", "😍"];
 
@@ -66,6 +67,39 @@ export default function Together() {
         <div className="text-[12px] font-bold tracking-[0.14em] text-white/35 uppercase mb-1">Вместе</div>
         <h1 className="text-[29px] font-extrabold tracking-tight leading-none">Мы</h1>
       </header>
+
+      {profiles.some((p) => activeMood(p)) && (
+        <Card className="p-4 mb-3">
+          <div className="text-[13px] font-semibold text-white/45 mb-3">Настроение</div>
+          <div className="space-y-3">
+            {profiles.map((p) => {
+              const mood = activeMood(p);
+              return (
+                <div key={p.id} className="flex items-center gap-3">
+                  <Avatar profile={p} size={38} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14.5px] font-bold truncate">
+                      {p.display_name || "Без имени"}
+                      {p.id === uid && <span className="text-white/30 font-normal"> · вы</span>}
+                    </div>
+                    <div className="text-[13px] text-white/45 truncate">
+                      {mood ? (
+                        <>
+                          {moodLabel(p)}
+                          {p.mood_text ? ` — ${p.mood_text}` : ""}
+                        </>
+                      ) : (
+                        "настроение не отмечено"
+                      )}
+                    </div>
+                  </div>
+                  {mood && <div className="text-[11.5px] text-white/25 shrink-0">{moodAge(p)}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       <Card className="p-4 mb-3">
         <div className="flex items-center justify-between mb-4">

@@ -4,10 +4,12 @@ import HabitCard from "../components/HabitCard";
 import { Empty, SegmentedControl } from "../components/ui";
 import { useStore } from "../lib/store";
 import { todayISO } from "../lib/date";
+import { activeMood, moodLabel } from "../lib/moods";
 
 export default function Home({ onOpenHabit, onCreate, onBurst }) {
   const { habits, profiles, me, partner, uid, doneSetFor, toggleCheckin, loading } = useStore();
   const [tab, setTab] = useState("shared");
+  const partnerMood = activeMood(partner);
 
   const active = useMemo(() => habits.filter((h) => h.status === "active"), [habits]);
 
@@ -67,6 +69,15 @@ export default function Home({ onOpenHabit, onCreate, onBurst }) {
             <h1 className="text-[29px] font-extrabold tracking-tight leading-none">
               {tab === "shared" ? "Наши привычки" : tab === "mine" ? "Мои привычки" : `Привычки ${partner?.display_name || ""}`}
             </h1>
+            {partnerMood && (
+              <div className="flex items-center gap-1.5 mt-1.5 text-[13px] text-white/40">
+                <span className="text-[14px]">{partnerMood.emoji}</span>
+                <span className="truncate">
+                  {partner?.display_name?.split(" ")[0]}: {moodLabel(partner)}
+                  {partner?.mood_text ? ` — ${partner.mood_text}` : ""}
+                </span>
+              </div>
+            )}
           </div>
           <button
             onClick={onCreate}
