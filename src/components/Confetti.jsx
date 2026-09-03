@@ -14,6 +14,7 @@ const PALETTE = ["mint", "sky", "pink", "amber", "violet", "coral"];
 export default function Confetti({ colorKey = "mint" }) {
   return (
     <div className="pointer-events-none fixed inset-0 z-[60] grid place-items-center">
+      <div className="relative w-0 h-0">
       {PIECES.map((p, i) => (
         <motion.span
           key={p.id}
@@ -28,6 +29,7 @@ export default function Confetti({ colorKey = "mint" }) {
           transition={{ duration: p.d + 0.35, ease: "easeOut" }}
         />
       ))}
+      </div>
     </div>
   );
 }

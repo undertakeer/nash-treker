@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Sheet from "../components/Sheet";
 import Avatar from "../components/Avatar";
@@ -31,9 +31,24 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
 
   const sets = useMemo(() => {
     const out = {};
+    if (!habit) return out;
     participants.forEach((p) => { out[p.id] = doneSetFor(habit.id, p.id); });
     return out;
   }, [participants, habit, doneSetFor]);
+
+  const combined = useMemo(() => {
+    if (participants.length < 2) return null;
+    const [a, b] = participants;
+    const s = new Set();
+    sets[a.id]?.forEach((iso) => { if (sets[b.id]?.has(iso)) s.add(iso); });
+    return s;
+  }, [participants, sets]);
+
+  // личную привычку партнёра открываем сразу на его календаре
+  useEffect(() => {
+    if (!habit) return;
+    setViewing(habit.kind === "personal" ? habit.owner_id : uid);
+  }, [habit?.id, habit?.kind, habit?.owner_id, uid]);
 
   if (!habit) return null;
 
@@ -43,14 +58,6 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
   const viewSet = sets[viewing] || new Set();
   const partnerOfView = participants.find((p) => p.id !== viewing);
   const since = (habit.created_at || today).slice(0, 10);
-
-  const combined = useMemo(() => {
-    if (participants.length < 2) return null;
-    const [a, b] = participants;
-    const s = new Set();
-    sets[a.id]?.forEach((iso) => { if (sets[b.id]?.has(iso)) s.add(iso); });
-    return s;
-  }, [participants, sets]);
 
   const mainSet = combined || sets[participants[0]?.id] || new Set();
   const mainStreak = streak(habit, mainSet);

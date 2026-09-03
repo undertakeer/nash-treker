@@ -69,7 +69,8 @@ export default function Notifications({ open, onClose }) {
               onClick={toggle}
               disabled={busy || ["unsupported", "not-configured", "denied", "checking"].includes(state)}
               variant={state === "on" ? "ghost" : "primary"}
-              className="!w-auto px-5 !py-2.5"
+              full={false}
+              className="px-5 py-2.5"
             >
               {state === "on" ? "Выключить" : "Включить"}
             </Button>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import HabitCard from "../components/HabitCard";
 import { Empty, SegmentedControl } from "../components/ui";
 import { useStore } from "../lib/store";
@@ -105,8 +105,7 @@ export default function Home({ onOpenHabit, onCreate, onBurst }) {
           }
         />
       ) : (
-        <AnimatePresence mode="popLayout">
-          <div className="space-y-3">
+        <div className="space-y-3">
             {shown.big.map((h) => (
               <motion.div key={h.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}>
                 <HabitCard
@@ -139,8 +138,7 @@ export default function Home({ onOpenHabit, onCreate, onBurst }) {
                 ))}
               </div>
             )}
-          </div>
-        </AnimatePresence>
+        </div>
       )}
     </div>
   );

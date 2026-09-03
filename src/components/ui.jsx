@@ -93,7 +93,7 @@ export function TextInput(props) {
   );
 }
 
-export function Button({ children, variant = "primary", colorKey = "mint", className = "", ...rest }) {
+export function Button({ children, variant = "primary", colorKey = "mint", full = true, className = "", ...rest }) {
   const styles = {
     primary: { background: hex(colorKey), color: "#0A0A0E" },
     ghost: { background: "rgba(255,255,255,.08)", color: "#fff" },
@@ -103,7 +103,7 @@ export function Button({ children, variant = "primary", colorKey = "mint", class
     <button
       {...rest}
       style={styles}
-      className={`press w-full py-3.5 rounded-2xl font-bold text-[15px] disabled:opacity-40 ${className}`}
+      className={`press rounded-2xl font-bold text-[15px] disabled:opacity-40 ${full ? "w-full py-3.5" : ""} ${className}`}
     >
       {children}
     </button>

@@ -37,11 +37,14 @@ export default function HabitCard({
   const doneIds = participants.filter((p) => doneSets[p.id]?.has(today)).map((p) => p.id);
 
   return (
-    <motion.button
+    <motion.div
       layout
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen?.(); } }}
       whileTap={{ scale: 0.985 }}
-      className="relative w-full text-left rounded-[26px] overflow-hidden press"
+      className="relative w-full text-left rounded-[26px] overflow-hidden press cursor-pointer"
       style={{ ...cardStyle(color, { strong: featured }), padding: featured ? 18 : 15 }}
     >
       <div className="flex items-start justify-between gap-2 mb-auto">
@@ -88,6 +91,6 @@ export default function HabitCard({
           {habit.status === "completed" ? "завершена" : "архив"}
         </div>
       )}
-    </motion.button>
+    </motion.div>
   );
 }
