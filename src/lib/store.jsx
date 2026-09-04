@@ -39,6 +39,7 @@ export function StoreProvider({ children }) {
   const [wishes, setWishes] = useState(() => readCache("wishes", []));
   const [purchases, setPurchases] = useState(() => readCache("purchases", []));
   const [goals, setGoals] = useState(() => readCache("goals", []));
+  const [tasks, setTasks] = useState(() => readCache("tasks", []));
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
   const [queue, setQueue] = useState(() => readCache("queue", []));
@@ -81,11 +82,12 @@ export function StoreProvider({ children }) {
   useEffect(() => writeCache("wishes", wishes), [wishes]);
   useEffect(() => writeCache("purchases", purchases), [purchases]);
   useEffect(() => writeCache("goals", goals), [goals]);
+  useEffect(() => writeCache("tasks", tasks), [tasks]);
 
   // ---------- загрузка ----------
   const loadAll = useCallback(async () => {
     if (!uid) return;
-    const [p, h, c, e, a, pr, fz, w, pu, g] = await Promise.all([
+    const [p, h, c, e, a, pr, fz, w, pu, g, t] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("habits").select("*").order("position").order("created_at"),
       supabase.from("checkins").select("*"),
@@ -96,6 +98,7 @@ export function StoreProvider({ children }) {
       supabase.from("wishes").select("*").order("position").order("created_at"),
       supabase.from("purchases").select("*").order("created_at", { ascending: false }).limit(60),
       supabase.from("goals").select("*").order("created_at", { ascending: false }),
+      supabase.from("tasks").select("*").order("position").order("created_at"),
     ]);
     // при ошибке сети оставляем то, что уже лежит в кэше
     let people = p.error ? null : p.data || [];
@@ -123,6 +126,7 @@ export function StoreProvider({ children }) {
     if (!w.error) setWishes(w.data || []);
     if (!pu.error) setPurchases(pu.data || []);
     if (!g.error) setGoals(g.data || []);
+    if (!t.error) setTasks(t.data || []);
     setLoading(false);
   }, [uid, session]);
 
@@ -160,6 +164,7 @@ export function StoreProvider({ children }) {
         else if (table === "wishes") apply(setWishes);
         else if (table === "purchases") apply(setPurchases);
         else if (table === "goals") apply(setGoals);
+        else if (table === "tasks") apply(setTasks);
         else if (table === "profiles") apply(setProfiles);
         else if (table === "achievements") apply(setAchievements);
         else if (table === "events") {
@@ -758,16 +763,73 @@ export function StoreProvider({ children }) {
     return { ...total, byBucket: data || [] };
   }, []);
 
+  // ---------- задачи ----------
+  const createTask = useCallback(
+    async (draft) => {
+      const maxPos = tasks.reduce((m, t) => Math.max(m, t.position || 0), 0);
+      const row = { emoji: "📌", color: "sky", ...draft, created_by: uid, position: maxPos + 1 };
+      const { data, error } = await supabase.from("tasks").insert(row).select().single();
+      if (error) {
+        showToast("Не удалось создать задачу", "⚠️");
+        return null;
+      }
+      setTasks((prev) => (prev.some((t) => t.id === data.id) ? prev : [...prev, data]));
+      return data;
+    },
+    [tasks, uid, showToast]
+  );
+
+  const updateTask = useCallback(
+    async (id, patch) => {
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+      const { error } = await supabase.from("tasks").update(patch).eq("id", id);
+      if (error) showToast("Не удалось сохранить", "⚠️");
+    },
+    [showToast]
+  );
+
+  const toggleTask = useCallback(
+    async (task) => {
+      const next = !task.done;
+      const patch = {
+        done: next,
+        done_at: next ? new Date().toISOString() : null,
+        done_by: next ? uid : null,
+      };
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, ...patch } : t)));
+      await supabase.from("tasks").update(patch).eq("id", task.id);
+      return next;
+    },
+    [uid]
+  );
+
+  const deleteTask = useCallback(
+    async (id) => {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      await supabase.from("tasks").delete().eq("id", id);
+      showToast("Задача удалена", "🗑");
+    },
+    [showToast]
+  );
+
+  const clearDoneTasks = useCallback(async () => {
+    const ids = tasks.filter((t) => t.done).map((t) => t.id);
+    if (!ids.length) return;
+    setTasks((prev) => prev.filter((t) => !t.done));
+    await supabase.from("tasks").delete().in("id", ids);
+    showToast(`Убрано ${ids.length}`, "🧹");
+  }, [tasks, showToast]);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
-    setFreezes([]); setWishes([]); setPurchases([]); setGoals([]);
+    setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]);
   }, []);
 
   const value = {
     session, uid, me, partner, profiles,
     habits, checkins, events, achievements, prefs,
-    freezes, wishes, purchases, goals, points, photos, freezesLeft,
+    freezes, wishes, purchases, goals, tasks, points, photos, freezesLeft,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
     toggleCheckin, nudge, react,
@@ -776,6 +838,7 @@ export function StoreProvider({ children }) {
     freezeDay, unfreezeDay,
     createWish, updateWish, deleteWish, buyWish, markPurchaseDone, cancelPurchase,
     createGoal, completeGoal, deleteGoal,
+    createTask, updateTask, toggleTask, deleteTask, clearDoneTasks,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 

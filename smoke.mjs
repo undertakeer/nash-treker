@@ -80,6 +80,11 @@ if (process.argv[3] === "auth") {
   put("purchases", [{ id: "pu1", buyer_id: pid, title: "Кино", emoji: "🎬", price: 50, status: "pending", created_at: new Date().toISOString() }]);
   put("goals", [{ id: "g1", title: "30 дней зала", emoji: "🎯", reward: "Ужин", habit_id: "h1", target: 30, created_at: "2026-08-01T00:00:00Z" }]);
   put("prefs", { user_id: uid, reminders: true });
+  put("tasks", [
+    { id: "t1", title: "Купить корм коту", emoji: "🛒", color: "sky", done: false, due_date: today, due_time: "18:00", assignee_id: null, priority: 1, position: 0, created_at: new Date().toISOString() },
+    { id: "t2", title: "Записаться к врачу", emoji: "🏥", color: "rose", done: false, due_date: null, assignee_id: uid, priority: 0, position: 1, created_at: new Date().toISOString() },
+    { id: "t3", title: "Оплатить интернет", emoji: "💳", color: "mint", done: true, done_at: new Date().toISOString(), done_by: pid, due_date: today, assignee_id: pid, priority: 0, position: 2, created_at: new Date().toISOString() },
+  ]);
 }
 
 // config.js
@@ -121,6 +126,8 @@ if (mounted && process.argv[3] === "auth") {
   };
 
   await click("Сегодня");
+  await click("Задачи");
+  await click("Купить корм");   await click("Отмена");
   await click("Мы");
   await click("Галерея");   await click("Закрыть");
   await click("Магазин");   await click("Закрыть");

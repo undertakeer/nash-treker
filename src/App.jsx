@@ -4,6 +4,8 @@ import { StoreProvider, useStore } from "./lib/store";
 import Auth from "./screens/Auth";
 import Home from "./screens/Home";
 import Today from "./screens/Today";
+import Tasks from "./screens/Tasks";
+import TaskEditor from "./screens/TaskEditor";
 import Together from "./screens/Together";
 import Gallery from "./screens/Gallery";
 import Shop from "./screens/Shop";
@@ -25,6 +27,7 @@ function Shell() {
   const [editor, setEditor] = useState({ open: false, habit: null });
   const [notifOpen, setNotifOpen] = useState(false);
   const [modal, setModal] = useState(null); // gallery | shop | goals | summary
+  const [taskEditor, setTaskEditor] = useState({ open: false, task: null });
   const [burst, setBurst] = useState(null);
 
   const fireBurst = useCallback((colorKey) => {
@@ -72,6 +75,13 @@ function Shell() {
             />
           )}
           {tab === "today" && <Today onOpenHabit={setOpenHabit} onBurst={fireBurst} />}
+          {tab === "tasks" && (
+            <Tasks
+              onOpenTask={(t) => setTaskEditor({ open: true, task: t })}
+              onCreate={() => setTaskEditor({ open: true, task: null })}
+              onBurst={fireBurst}
+            />
+          )}
           {tab === "together" && <Together onOpen={setModal} />}
           {tab === "profile" && (
             <Profile onOpenNotifications={() => setNotifOpen(true)} onOpen={setModal} />
@@ -98,6 +108,11 @@ function Shell() {
       />
 
       <Notifications open={notifOpen} onClose={() => setNotifOpen(false)} />
+      <TaskEditor
+        open={taskEditor.open}
+        task={taskEditor.task}
+        onClose={() => setTaskEditor({ open: false, task: null })}
+      />
       <Gallery open={modal === "gallery"} onClose={() => setModal(null)} />
       <Shop open={modal === "shop"} onClose={() => setModal(null)} />
       <Goals open={modal === "goals"} onClose={() => setModal(null)} />

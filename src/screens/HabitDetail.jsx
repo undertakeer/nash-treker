@@ -100,13 +100,22 @@ export default function HabitDetail({ habitId, onClose, onEdit, onBurst }) {
       <div className="px-5 pb-12">
         <div className="flex items-center justify-between py-2">
           <button
-            onClick={() => setMenu((v) => !v)}
-            className="press w-9 h-9 rounded-full bg-white/8 grid place-items-center text-[17px] leading-none pb-1"
-            aria-label="Меню"
+            onClick={onClose}
+            className="press w-9 h-9 rounded-full bg-white/8 grid place-items-center text-[19px] leading-none text-white/60"
+            aria-label="Закрыть"
           >
-            •••
+            ×
           </button>
-          <CheckCircle done={iDid} onClick={handleCheck} colorKey={color} size={34} disabled={!canCheck} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMenu((v) => !v)}
+              className="press w-9 h-9 rounded-full bg-white/8 grid place-items-center text-[17px] leading-none pb-1"
+              aria-label="Меню"
+            >
+              •••
+            </button>
+            <CheckCircle done={iDid} onClick={handleCheck} colorKey={color} size={34} disabled={!canCheck} />
+          </div>
         </div>
 
         <AnimatePresence>

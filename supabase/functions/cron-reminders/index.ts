@@ -16,11 +16,13 @@ Deno.serve(async (req) => {
 
   const admin = adminClient();
 
-  const [{ data: profiles }, { data: habits }, { data: prefsRows }] = await Promise.all([
-    admin.from("profiles").select("*"),
-    admin.from("habits").select("*").eq("status", "active"),
-    admin.from("notification_prefs").select("*"),
-  ]);
+  const [{ data: profiles }, { data: habits }, { data: prefsRows }, { data: tasks }] =
+    await Promise.all([
+      admin.from("profiles").select("*"),
+      admin.from("habits").select("*").eq("status", "active"),
+      admin.from("notification_prefs").select("*"),
+      admin.from("tasks").select("*").eq("done", false).not("due_time", "is", null),
+    ]);
 
   const prefsOf = (id: string) => prefsRows?.find((p) => p.user_id === id);
   let sent = 0;
@@ -82,7 +84,25 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Умное напоминание: партнёр закрыл общую привычку, вы — нет
+    // 3. Задачи со сроком: пинг в назначенное время
+    if (prefs?.task_reminders !== false && !quiet) {
+      const mine = (tasks ?? []).filter(
+        (t) => t.due_date === date && (t.assignee_id === person.id || t.assignee_id === null),
+      );
+      for (const task of mine) {
+        const target = hhmmToMinutes(task.due_time, 9 * 60);
+        if (Math.abs(minutes - target) > WINDOW) continue;
+        if (!(await claim(admin, person.id, "task", `${task.id}:${date}`))) continue;
+
+        sent += await sendToUser(admin, person.id, {
+          title: `${task.emoji} ${task.title}`,
+          body: task.note || (task.assignee_id ? "Пора заняться" : "Общая задача — пора заняться"),
+          tag: `task-${task.id}`,
+        });
+      }
+    }
+
+    // 4. Умное напоминание: партнёр закрыл общую привычку, вы — нет
     if (prefs?.smart_nudge !== false && !quiet) {
       const shared = own.filter((h) => h.kind === "shared" && !doneToday.has(h.id));
       if (shared.length) {
@@ -111,7 +131,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 4. Итоги недели, воскресенье вечером
+    // 5. Итоги недели, воскресенье вечером
     if (prefs?.weekly_summary !== false && isoWeekday === 7 && Math.abs(minutes - 20 * 60) <= WINDOW) {
       const weekStart = new Date(date);
       weekStart.setDate(weekStart.getDate() - 6);

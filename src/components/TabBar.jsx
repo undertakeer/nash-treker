@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 const TABS = [
   { id: "home", label: "Привычки", glyph: "◎" },
   { id: "today", label: "Сегодня", glyph: "✓" },
+  { id: "tasks", label: "Задачи", glyph: "☑" },
   { id: "together", label: "Мы", glyph: "❤" },
   { id: "profile", label: "Профиль", glyph: "☺" },
 ];
@@ -18,7 +19,7 @@ export default function TabBar({ tab, onChange }) {
               <button
                 key={t.id}
                 onClick={() => onChange(t.id)}
-                className="relative flex-1 py-2 rounded-[16px] flex flex-col items-center gap-0.5"
+                className="relative flex-1 min-w-0 py-2 rounded-[16px] flex flex-col items-center gap-0.5"
                 style={{ color: active ? "#fff" : "rgba(255,255,255,.38)" }}
               >
                 {active && (
@@ -29,7 +30,7 @@ export default function TabBar({ tab, onChange }) {
                   />
                 )}
                 <span className="relative text-[15px] leading-none">{t.glyph}</span>
-                <span className="relative text-[11px] font-semibold">{t.label}</span>
+                <span className="relative text-[10.5px] font-semibold">{t.label}</span>
               </button>
             );
           })}
