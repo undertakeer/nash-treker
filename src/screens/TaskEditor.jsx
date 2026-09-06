@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Sheet from "../components/Sheet";
+import EmojiPicker from "../components/EmojiPicker";
 import Avatar from "../components/Avatar";
 import { Button, Field, TextInput } from "../components/ui";
 import { useStore } from "../lib/store";
@@ -112,21 +113,15 @@ export default function TaskEditor({ open, task, onClose }) {
           </Field>
 
           <Field label="Стикер">
-            <div className="grid grid-cols-10 gap-1.5 max-h-[132px] overflow-y-auto no-scrollbar p-1">
-              {EMOJI.map((e) => (
-                <button
-                  key={e}
-                  onClick={() => set({ emoji: e })}
-                  className="aspect-square rounded-xl grid place-items-center text-[17px] press"
-                  style={{
-                    background: form.emoji === e ? rgba(color, 0.28) : "rgba(255,255,255,.05)",
-                    border: `1px solid ${form.emoji === e ? rgba(color, 0.5) : "transparent"}`,
-                  }}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
+            <EmojiPicker
+              value={form.emoji}
+              onChange={(emoji) => set({ emoji })}
+              list={EMOJI}
+              colorKey={color}
+              cols={10}
+              size={17}
+              maxHeight={132}
+            />
           </Field>
 
           <Field label="Цвет">

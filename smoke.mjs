@@ -137,7 +137,11 @@ if (mounted && process.argv[3] === "auth") {
   await click("Сменить пароль"); await click("Отмена");
   await click("Уведомления");    await click("Закрыть");
   await click("Привычки");
-  await click("Ходить в зал");   await click("Изменить");
+  await click("Ходить в зал");
+  await click("•••", { exact: true });
+  await click("Изменить");
+  await click("Свой смайлик");   await click("Ок", { exact: true });
+  await click("своё", { exact: true });
   await click("Отмена");
 }
 

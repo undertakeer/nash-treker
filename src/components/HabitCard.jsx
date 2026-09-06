@@ -48,10 +48,14 @@ export default function HabitCard({
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen?.(); } }}
       whileTap={{ scale: 0.985 }}
-      className="relative w-full text-left rounded-[26px] overflow-hidden press cursor-pointer"
-      style={{ ...cardStyle(color, { strong: featured }), padding: featured ? 18 : 15 }}
+      className="relative w-full h-full flex flex-col text-left rounded-[26px] overflow-hidden press cursor-pointer"
+      style={{
+        ...cardStyle(color, { strong: featured }),
+        padding: featured ? 18 : 15,
+        minHeight: featured ? 168 : 134,
+      }}
     >
-      <div className="flex items-start justify-between gap-2 mb-auto">
+      <div className="flex items-start justify-between gap-2">
         <span style={{ fontSize: featured ? 25 : 21 }} className="leading-none">{habit.icon}</span>
         <div className="flex items-center gap-2">
           <AvatarStack profiles={participants} size={featured ? 25 : 22} doneIds={doneIds} />
@@ -65,26 +69,25 @@ export default function HabitCard({
         </div>
       </div>
 
-      <div style={{ marginTop: featured ? 44 : 30 }}>
-        <div className="flex items-baseline gap-2">
-          <div
-            className="font-bold leading-snug"
-            style={{ fontSize: featured ? 19 : 15.5, letterSpacing: "-0.01em" }}
-          >
-            {habit.title}
-          </div>
-          {!featured && value > 0 && <Flame value={value} size={12} className="shrink-0" />}
+      {/* прижимаем текст и полоску к низу — тогда в сетке карточки выглядят ровно,
+          как бы ни переносилось название */}
+      <div className="mt-auto" style={{ paddingTop: featured ? 40 : 26 }}>
+        <div
+          className="font-bold leading-snug line-clamp-2"
+          style={{ fontSize: featured ? 19 : 15.5, letterSpacing: "-0.01em" }}
+        >
+          {habit.title}
         </div>
-        <div className="text-white/45 font-medium" style={{ fontSize: featured ? 14 : 12.5 }}>
+        <div className="text-white/45 font-medium truncate" style={{ fontSize: featured ? 14 : 12.5 }}>
           {scheduleLabel(habit)}
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mt-3">
-        <div className="flex-1">
+      <div className="flex items-center gap-2.5 mt-3">
+        <div className="flex-1 min-w-0">
           <WeekStrip marks={marks} colorKey={color} height={featured ? 9 : 8} gap={featured ? 6 : 4} />
         </div>
-        {featured && value > 0 && <Flame value={value} size={13} />}
+        {value > 0 && <Flame value={value} size={featured ? 13 : 12} className="shrink-0" />}
       </div>
 
       {habit.status !== "active" && (

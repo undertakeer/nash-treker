@@ -1,6 +1,11 @@
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { useEffect } from "react";
 
+// оставляем полоску под статус-баром: иначе на iPhone скруглённые углы шторки
+// упираются в скруглённые углы экрана и по краям вылезает чёрное
+const TOP_GAP = "calc(env(safe-area-inset-top) + 10px)";
+const SHEET_H = `calc(100dvh - ${TOP_GAP})`;
+
 export default function Sheet({ open, onClose, children, tall = false }) {
   const dragControls = useDragControls();
 
@@ -27,7 +32,7 @@ export default function Sheet({ open, onClose, children, tall = false }) {
           />
           <motion.div
             className="relative w-full max-w-[520px] rounded-t-[28px] bg-[#111116] border-t border-x border-white/8 overflow-hidden"
-            style={{ height: tall ? "92vh" : "auto", maxHeight: "92vh" }}
+            style={{ height: tall ? SHEET_H : "auto", maxHeight: SHEET_H }}
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -48,7 +53,13 @@ export default function Sheet({ open, onClose, children, tall = false }) {
             >
               <div className="w-10 h-1 rounded-full bg-white/22" />
             </div>
-            <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: "calc(92vh - 20px)" }}>
+            <div
+              className="overflow-y-auto no-scrollbar"
+              style={{
+                maxHeight: `calc(${SHEET_H} - 20px)`,
+                paddingBottom: "env(safe-area-inset-bottom)",
+              }}
+            >
               {children}
             </div>
           </motion.div>

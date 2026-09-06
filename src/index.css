@@ -15,12 +15,18 @@
 
 html, body, #root { height: 100%; }
 
+/* фон и на html тоже — иначе при оттяжке iOS показывает белое/чужое полотно */
+html {
+  background: var(--color-ink);
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--color-ink);
   color: #fff;
   font-family: var(--font-sans);
-  overscroll-behavior-y: none;
+  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -29,6 +35,15 @@ input, textarea { font-size: 16px; }   /* иначе iOS зумит поле п�
 
 .safe-top    { padding-top: max(env(safe-area-inset-top), 12px); }
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
+
+/* растушёвка у скруглённых краёв экрана: контент уходит в фон, а не обрывается */
+.edge-fade-top {
+  height: calc(env(safe-area-inset-top) + 8px);
+  background: linear-gradient(to bottom, var(--color-ink) 58%, rgba(8, 8, 11, 0));
+}
+.edge-fade-bottom {
+  background: linear-gradient(to top, var(--color-ink) 46%, rgba(8, 8, 11, 0));
+}
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }

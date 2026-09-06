@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Sheet from "../components/Sheet";
+import EmojiPicker from "../components/EmojiPicker";
 import { Button, Field, Switch, TextInput } from "../components/ui";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
 import { WEEKDAY_SHORT } from "../lib/date";
@@ -12,6 +13,20 @@ const EMOJI = [
   "🌞","🌙","🔥","⭐️","🏆","🎰","🥂","🧊","🩺","🚴","🏊","⛰","🧗","🎾","⚽️","🏀",
 ];
 
+const GOAL_PRESETS = [null, 21, 30, 66, 100];
+const GOAL_MAX = 999;
+
+function daysWord(n) {
+  const v = Number(n);
+  if (!v) return "дней";
+  const t = v % 100;
+  if (t >= 11 && t <= 14) return "дней";
+  const o = v % 10;
+  if (o === 1) return "день";
+  if (o >= 2 && o <= 4) return "дня";
+  return "дней";
+}
+
 const EMPTY = {
   title: "", icon: "💧", color: "mint", kind: "shared",
   schedule_type: "daily", target_per_week: 7, weekdays: [1, 2, 3, 4, 5, 6, 7],
@@ -22,11 +37,13 @@ export default function HabitEditor({ open, onClose, habit }) {
   const { createHabit, updateHabit } = useStore();
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [customGoal, setCustomGoal] = useState(false);
   const editing = Boolean(habit);
 
   useEffect(() => {
     if (!open) return;
     setForm(habit ? { ...EMPTY, ...habit } : EMPTY);
+    setCustomGoal(Boolean(habit?.goal_days) && !GOAL_PRESETS.includes(habit.goal_days));
   }, [open, habit]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -45,7 +62,7 @@ export default function HabitEditor({ open, onClose, habit }) {
       weekdays: form.schedule_type === "weekdays" ? form.weekdays : [1, 2, 3, 4, 5, 6, 7],
       reminder_enabled: form.reminder_enabled,
       reminder_time: form.reminder_time,
-      goal_days: form.goal_days || null,
+      goal_days: form.goal_days ? Math.min(GOAL_MAX, Math.max(1, Math.round(form.goal_days))) : null,
       pinned: form.pinned,
     };
     try {
@@ -107,21 +124,12 @@ export default function HabitEditor({ open, onClose, habit }) {
           </Field>
 
           <Field label="Иконка">
-            <div className="grid grid-cols-8 gap-1.5 max-h-[168px] overflow-y-auto no-scrollbar p-1">
-              {EMOJI.map((e) => (
-                <button
-                  key={e}
-                  onClick={() => set({ icon: e })}
-                  className="aspect-square rounded-xl grid place-items-center text-[20px] press"
-                  style={{
-                    background: form.icon === e ? rgba(color, 0.28) : "rgba(255,255,255,.05)",
-                    border: `1px solid ${form.icon === e ? rgba(color, 0.5) : "transparent"}`,
-                  }}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
+            <EmojiPicker
+              value={form.icon}
+              onChange={(icon) => set({ icon })}
+              list={EMOJI}
+              colorKey={color}
+            />
           </Field>
 
           <Field label="Цвет">
@@ -254,21 +262,55 @@ export default function HabitEditor({ open, onClose, habit }) {
           </div>
 
           <Field label="Цель" hint="Когда наберёте нужное количество отметок, приложение предложит завершить привычку.">
-            <div className="flex gap-2">
-              {[null, 21, 30, 66, 100].map((g) => (
-                <button
-                  key={String(g)}
-                  onClick={() => set({ goal_days: g })}
-                  className="flex-1 py-2.5 rounded-xl text-[13px] font-bold press"
-                  style={{
-                    background: form.goal_days === g ? hex(color) : "rgba(255,255,255,.06)",
-                    color: form.goal_days === g ? "#0A0A0E" : "rgba(255,255,255,.55)",
-                  }}
-                >
-                  {g === null ? "без цели" : g}
-                </button>
-              ))}
+            <div className="grid grid-cols-3 gap-2">
+              {GOAL_PRESETS.map((g) => {
+                const on = !customGoal && form.goal_days === g;
+                return (
+                  <button
+                    key={String(g)}
+                    onClick={() => { setCustomGoal(false); set({ goal_days: g }); }}
+                    className="py-2.5 rounded-xl text-[13.5px] font-bold press"
+                    style={{
+                      background: on ? hex(color) : "rgba(255,255,255,.06)",
+                      color: on ? "#0A0A0E" : "rgba(255,255,255,.55)",
+                    }}
+                  >
+                    {g === null ? "без цели" : g}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => { setCustomGoal(true); if (GOAL_PRESETS.includes(form.goal_days)) set({ goal_days: null }); }}
+                className="py-2.5 rounded-xl text-[13.5px] font-bold press"
+                style={{
+                  background: customGoal ? hex(color) : "rgba(255,255,255,.06)",
+                  color: customGoal ? "#0A0A0E" : "rgba(255,255,255,.55)",
+                }}
+              >
+                своё
+              </button>
             </div>
+
+            {customGoal && (
+              <div className="flex items-center gap-2.5 mt-2.5">
+                <TextInput
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={GOAL_MAX}
+                  value={form.goal_days ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    set({ goal_days: raw === "" ? null : Math.min(GOAL_MAX, Math.abs(parseInt(raw, 10)) || 0) || null });
+                  }}
+                  placeholder="например, 45"
+                  className="flex-1"
+                />
+                <span className="text-[14px] font-semibold text-white/40 shrink-0">
+                  {daysWord(form.goal_days)}
+                </span>
+              </div>
+            )}
           </Field>
 
           <Button onClick={save} disabled={busy || !form.title.trim()} colorKey={color}>

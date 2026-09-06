@@ -73,13 +73,15 @@ export function CheckCircle({ done, onClick, size = 34, colorKey = "mint", disab
   );
 }
 
+// именно div, а не label: внутри часто сетки кнопок, и тап по подписи
+// активировал бы первую из них (например, сбрасывал цель на «без цели»)
 export function Field({ label, children, hint }) {
   return (
-    <label className="block">
+    <div className="block">
       <div className="text-[13px] font-semibold text-white/45 mb-2">{label}</div>
       {children}
       {hint && <div className="text-[12px] text-white/30 mt-1.5">{hint}</div>}
-    </label>
+    </div>
   );
 }
 

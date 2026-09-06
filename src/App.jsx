@@ -89,6 +89,9 @@ function Shell() {
         </motion.main>
       </AnimatePresence>
 
+      {/* верхняя растушёвка под статус-баром */}
+      <div aria-hidden className="edge-fade-top pointer-events-none fixed inset-x-0 top-0 z-20" />
+
       <TabBar tab={tab} onChange={setTab} />
       <InstallHint />
 
