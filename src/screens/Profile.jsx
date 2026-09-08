@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../components/Avatar";
 import { Button, Card, Empty, Row } from "../components/ui";
 import MoodPicker from "../components/MoodPicker";
@@ -78,6 +78,13 @@ export default function Profile({ onOpenNotifications, onOpen }) {
     return out;
   }, [mine, heatYear]);
 
+  // сетка шире карточки: показываем свежий конец, а не пустой январь
+  const heatBox = useRef(null);
+  useEffect(() => {
+    const box = heatBox.current;
+    if (box) box.scrollLeft = box.scrollWidth;
+  }, [heat]);
+
   const years = useMemo(() => {
     const first = mine.reduce((min, c) => (!min || c.day < min ? c.day : min), null);
     const from = first ? Number(first.slice(0, 4)) : new Date().getFullYear();
@@ -156,7 +163,7 @@ export default function Profile({ onOpenNotifications, onOpen }) {
             </div>
           )}
         </div>
-        <div className="overflow-x-auto no-scrollbar -mx-1 px-1">
+        <div ref={heatBox} className="overflow-x-auto no-scrollbar -mx-1 px-1">
           <div
             className="grid grid-flow-col gap-[3px]"
             style={{ gridTemplateRows: "repeat(7, 10px)" }}

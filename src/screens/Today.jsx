@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import Avatar from "../components/Avatar";
 import { Card, CheckCircle, Empty, Flame, Progress } from "../components/ui";
 import { useStore } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
@@ -8,7 +7,7 @@ import { MONTHS_GEN, WEEKDAY_LONG, isoWeekday, todayISO } from "../lib/date";
 import { isScheduled, scheduleLabel, streak } from "../lib/stats";
 
 export default function Today({ onOpenHabit, onBurst }) {
-  const { habits, uid, partner, doneSetFor, freezeSetFor, toggleCheckin } = useStore();
+  const { habits, uid, doneSetFor, freezeSetFor, toggleCheckin } = useStore();
   const today = todayISO();
   const [showDone, setShowDone] = useState(false);
 
@@ -23,11 +22,10 @@ export default function Today({ onOpenHabit, onBurst }) {
           habit: h,
           done: set.has(today),
           streak: streak(h, set, freezeSetFor(h.id, uid)),
-          partnerDone: partner ? doneSetFor(h.id, partner.id).has(today) : false,
         };
       })
       .sort((a, b) => Number(a.done) - Number(b.done) || (a.habit.position || 0) - (b.habit.position || 0));
-  }, [habits, uid, today, doneSetFor, freezeSetFor, partner]);
+  }, [habits, uid, today, doneSetFor, freezeSetFor]);
 
   const left = rows.filter((r) => !r.done);
   const done = rows.filter((r) => r.done);
@@ -67,16 +65,6 @@ export default function Today({ onOpenHabit, onBurst }) {
             </div>
           </div>
           <Progress percent={percent} colorKey="mint" />
-
-          {partner && (
-            <div className="flex items-center gap-2 mt-4 pt-3.5 border-t border-white/6">
-              <Avatar profile={partner} size={26} showMood={false} />
-              <div className="text-[13px] text-white/45 flex-1 truncate">
-                {partner.display_name?.split(" ")[0]}: {rows.filter((r) => r.partnerDone).length} из{" "}
-                {rows.filter((r) => r.habit.kind === "shared").length} общих
-              </div>
-            </div>
-          )}
         </Card>
       )}
 
@@ -90,7 +78,7 @@ export default function Today({ onOpenHabit, onBurst }) {
         <>
           <AnimatePresence initial={false}>
             {left.map((r) => (
-              <Line key={r.habit.id} row={r} partner={partner} onOpen={() => onOpenHabit(r.habit.id)} onToggle={() => handle(r)} />
+              <Line key={r.habit.id} row={r} onOpen={() => onOpenHabit(r.habit.id)} onToggle={() => handle(r)} />
             ))}
           </AnimatePresence>
 
@@ -114,7 +102,7 @@ export default function Today({ onOpenHabit, onBurst }) {
               <AnimatePresence initial={false}>
                 {showDone &&
                   done.map((r) => (
-                    <Line key={r.habit.id} row={r} partner={partner} onOpen={() => onOpenHabit(r.habit.id)} onToggle={() => handle(r)} />
+                    <Line key={r.habit.id} row={r} onOpen={() => onOpenHabit(r.habit.id)} onToggle={() => handle(r)} />
                   ))}
               </AnimatePresence>
             </div>
@@ -125,7 +113,7 @@ export default function Today({ onOpenHabit, onBurst }) {
   );
 }
 
-function Line({ row, partner, onOpen, onToggle }) {
+function Line({ row, onOpen, onToggle }) {
   const { habit, done } = row;
   const color = habit.color || "mint";
   return (
@@ -156,9 +144,6 @@ function Line({ row, partner, onOpen, onToggle }) {
             {row.streak > 0 && <Flame value={row.streak} size={11} />}
           </div>
         </div>
-        {habit.kind === "shared" && partner && (
-          <Avatar profile={partner} size={22} showMood={false} dim={!row.partnerDone} />
-        )}
         <CheckCircle done={done} colorKey={color} size={30} onClick={onToggle} />
       </div>
     </motion.div>

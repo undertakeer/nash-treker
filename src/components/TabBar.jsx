@@ -1,19 +1,25 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
+import {
+  IconHabits, IconMap, IconProfile, IconTasks, IconToday, IconUs,
+} from "./Icons";
 
 const TABS = [
-  { id: "home", label: "Привычки", glyph: "◎" },
-  { id: "today", label: "Сегодня", glyph: "✓" },
-  { id: "tasks", label: "Задачи", glyph: "☑" },
-  { id: "map", label: "Карта", glyph: "🗺" },
-  { id: "together", label: "Мы", glyph: "❤" },
-  { id: "profile", label: "Профиль", glyph: "☺" },
+  { id: "home", label: "Привычки", Icon: IconHabits },
+  { id: "today", label: "Сегодня", Icon: IconToday },
+  { id: "tasks", label: "Задачи", Icon: IconTasks },
+  { id: "map", label: "Карта", Icon: IconMap },
+  { id: "together", label: "Мы", Icon: IconUs },
+  { id: "profile", label: "Профиль", Icon: IconProfile },
 ];
+
+/** Сколько вкладок помещается в ряд одновременно, остальные — прокруткой */
+const VISIBLE = 4;
 
 export default function TabBar({ tab, onChange }) {
   const scroller = useRef(null);
 
-  // подвозим активную вкладку в видимую часть — вкладок больше, чем влезает
+  // активная вкладка сама подъезжает в видимую часть
   useEffect(() => {
     const box = scroller.current;
     const el = box?.querySelector(`[data-tab="${tab}"]`);
@@ -30,28 +36,31 @@ export default function TabBar({ tab, onChange }) {
         aria-hidden
         className="edge-fade-bottom pointer-events-none absolute inset-x-0 bottom-full h-10"
       />
-      <div className="px-4 pb-[max(env(safe-area-inset-bottom),10px)] pt-1">
-        <div className="rounded-[22px] bg-[#16161C] border border-white/10 p-1.5">
+      <div className="px-4 pt-1 pb-[max(calc(env(safe-area-inset-bottom)-14px),8px)]">
+        <div className="rounded-[20px] bg-[#16161C] border border-white/10 p-1">
           <div ref={scroller} className="flex overflow-x-auto no-scrollbar scroll-smooth">
-            {TABS.map((t) => {
-              const active = tab === t.id;
+            {TABS.map(({ id, label, Icon }) => {
+              const active = tab === id;
               return (
                 <button
-                  key={t.id}
-                  data-tab={t.id}
-                  onClick={() => onChange(t.id)}
-                  className="relative shrink-0 grow basis-0 min-w-[64px] py-2 rounded-[16px] flex flex-col items-center gap-0.5"
-                  style={{ color: active ? "#fff" : "rgba(255,255,255,.38)" }}
+                  key={id}
+                  data-tab={id}
+                  onClick={() => onChange(id)}
+                  className="relative py-1.5 rounded-[15px] flex flex-col items-center gap-[3px]"
+                  style={{
+                    flex: `0 0 ${100 / VISIBLE}%`,
+                    color: active ? "#fff" : "rgba(255,255,255,.4)",
+                  }}
                 >
                   {active && (
                     <motion.span
                       layoutId="tabpill"
-                      className="absolute inset-0 rounded-[16px] bg-white/10"
+                      className="absolute inset-0 rounded-[15px] bg-white/10"
                       transition={{ type: "spring", damping: 30, stiffness: 420 }}
                     />
                   )}
-                  <span className="relative text-[15px] leading-none">{t.glyph}</span>
-                  <span className="relative text-[10.5px] font-semibold whitespace-nowrap">{t.label}</span>
+                  <Icon className="relative" />
+                  <span className="relative text-[10.5px] font-semibold whitespace-nowrap">{label}</span>
                 </button>
               );
             })}
