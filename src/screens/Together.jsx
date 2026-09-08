@@ -12,12 +12,13 @@ import { goalProgressDays } from "../lib/goals";
 const REACTIONS = ["❤️", "🔥", "👏", "😍"];
 
 export default function Together({ onOpen }) {
-  const { habits, profiles, checkins, uid, events, react, doneSetFor, points, photos, goals } = useStore();
+  const { habits, profiles, checkins, uid, events, react, doneSetFor, points, photos, goals, wishlist } = useStore();
   const today = todayISO();
   const week = weekDays(today);
 
   const active = useMemo(() => habits.filter((h) => h.status === "active"), [habits]);
   const activeGoals = useMemo(() => goals.filter((g) => !g.completed_at), [goals]);
+  const openWishes = useMemo(() => wishlist.filter((w) => w.status !== "got").length, [wishlist]);
 
   const perPerson = useMemo(() => {
     return profiles.map((p) => {
@@ -77,10 +78,12 @@ export default function Together({ onOpen }) {
         <h1 className="text-[29px] font-extrabold tracking-tight leading-none">Мы</h1>
       </header>
 
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        <Tile emoji="📸" label="Галерея"  badge={photos.length}   onClick={() => onOpen("gallery")} color="violet" />
-        <Tile emoji="🪙" label="Магазин"  badge={points.balance}  onClick={() => onOpen("shop")}    color="amber" />
-        <Tile emoji="🎯" label="Цели"     badge={activeGoals.length} onClick={() => onOpen("goals")} color="mint" />
+      {/* кнопок стало больше, чем влезает в ряд — прокручиваем вбок */}
+      <div className="flex gap-2 mb-4 overflow-x-auto no-scrollbar -mx-4 px-4">
+        <Tile emoji="📸" label="Галерея"  badge={photos.length}      onClick={() => onOpen("gallery")}  color="violet" />
+        <Tile emoji="🎁" label="Вишлист"  badge={openWishes}         onClick={() => onOpen("wishlist")} color="pink" />
+        <Tile emoji="🪙" label="Магазин"  badge={points.balance}     onClick={() => onOpen("shop")}     color="amber" />
+        <Tile emoji="🎯" label="Цели"     badge={activeGoals.length} onClick={() => onOpen("goals")}    color="mint" />
         <Tile emoji="📊" label="Итоги"    onClick={() => onOpen("summary")} color="sky" />
       </div>
 
@@ -282,7 +285,7 @@ function Tile({ emoji, label, badge, onClick, color = "mint" }) {
   return (
     <button
       onClick={onClick}
-      className="press rounded-2xl py-3 flex flex-col items-center gap-1"
+      className="press shrink-0 w-[84px] rounded-2xl py-3 flex flex-col items-center gap-1"
       style={{ background: rgba(color, 0.12), border: `1px solid ${rgba(color, 0.16)}` }}
     >
       <span className="text-[20px] leading-none">{emoji}</span>

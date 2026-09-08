@@ -123,6 +123,7 @@ export default function DayCard({ habit, day, colorKey = "mint", canEdit }) {
           className="fixed inset-0 z-[80] bg-black/92 grid place-items-center p-4"
           onClick={() => setZoom(false)}
         >
+          <div aria-hidden className="bleed-under bg-black/92" />
           <img src={row.photo_url} alt="" className="max-w-full max-h-full rounded-2xl" />
         </div>
       )}

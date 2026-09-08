@@ -118,6 +118,7 @@ export default function Gallery({ open, onClose }) {
             exit={{ opacity: 0 }}
             onClick={() => setActive(null)}
           >
+            <div aria-hidden className="bleed-under bg-black/93" />
             <div className="flex-1 grid place-items-center p-4">
               <img src={active.photo_url} alt="" className="max-w-full max-h-full rounded-2xl" />
             </div>

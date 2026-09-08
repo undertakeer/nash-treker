@@ -1,10 +1,9 @@
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { useEffect } from "react";
 
-// оставляем полоску под статус-баром: иначе на iPhone скруглённые углы шторки
-// упираются в скруглённые углы экрана и по краям вылезает чёрное
-const TOP_GAP = "calc(env(safe-area-inset-top) + 10px)";
-const SHEET_H = `calc(100dvh - ${TOP_GAP})`;
+// высота живёт в CSS (--sheet-h): нужен запасной вариант для iOS без dvh
+const SHEET_H = "var(--sheet-h)";
+const PANEL_BG = "#111116";
 
 export default function Sheet({ open, onClose, children, tall = false }) {
   const dragControls = useDragControls();
@@ -31,7 +30,7 @@ export default function Sheet({ open, onClose, children, tall = false }) {
             onClick={onClose}
           />
           <motion.div
-            className="relative w-full max-w-[520px] rounded-t-[28px] bg-[#111116] border-t border-x border-white/8 overflow-hidden"
+            className="relative w-full max-w-[520px]"
             style={{ height: tall ? SHEET_H : "auto", maxHeight: SHEET_H }}
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
@@ -47,21 +46,29 @@ export default function Sheet({ open, onClose, children, tall = false }) {
             }}
           >
             <div
-              onPointerDown={(e) => dragControls.start(e)}
-              style={{ touchAction: "none" }}
-              className="pt-3 pb-2 grid place-items-center cursor-grab active:cursor-grabbing"
+              className="h-full rounded-t-[28px] border-t border-x border-white/8 overflow-hidden"
+              style={{ background: PANEL_BG }}
             >
-              <div className="w-10 h-1 rounded-full bg-white/22" />
+              <div
+                onPointerDown={(e) => dragControls.start(e)}
+                style={{ touchAction: "none" }}
+                className="pt-3 pb-2 grid place-items-center cursor-grab active:cursor-grabbing"
+              >
+                <div className="w-10 h-1 rounded-full bg-white/22" />
+              </div>
+              <div
+                className="overflow-y-auto overscroll-contain no-scrollbar"
+                style={{
+                  maxHeight: `calc(${SHEET_H} - 20px)`,
+                  paddingBottom: "env(safe-area-inset-bottom)",
+                }}
+              >
+                {children}
+              </div>
             </div>
-            <div
-              className="overflow-y-auto no-scrollbar"
-              style={{
-                maxHeight: `calc(${SHEET_H} - 20px)`,
-                paddingBottom: "env(safe-area-inset-bottom)",
-              }}
-            >
-              {children}
-            </div>
+
+            {/* низ экрана у iOS плавает — досыпаем фона под шторку */}
+            <div aria-hidden className="bleed-under" style={{ background: PANEL_BG }} />
           </motion.div>
         </motion.div>
       )}

@@ -12,6 +12,7 @@ import PlaceDetail from "./screens/PlaceDetail";
 import Together from "./screens/Together";
 import Gallery from "./screens/Gallery";
 import Shop from "./screens/Shop";
+import Wishlist from "./screens/Wishlist";
 import Goals from "./screens/Goals";
 import MonthSummary from "./screens/MonthSummary";
 import Profile from "./screens/Profile";
@@ -29,7 +30,7 @@ function Shell() {
   const [openHabit, setOpenHabit] = useState(null);
   const [editor, setEditor] = useState({ open: false, habit: null });
   const [notifOpen, setNotifOpen] = useState(false);
-  const [modal, setModal] = useState(null); // gallery | shop | goals | summary
+  const [modal, setModal] = useState(null); // gallery | wishlist | shop | goals | summary
   const [taskEditor, setTaskEditor] = useState({ open: false, task: null });
   const [placeEditor, setPlaceEditor] = useState({ open: false, place: null, draft: null });
   const [openPlace, setOpenPlace] = useState(null);
@@ -104,6 +105,13 @@ function Shell() {
         </motion.main>
       </AnimatePresence>
 
+      {/* и под самим приложением тоже: тот же фон ниже видимого низа */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 h-40 translate-y-full"
+        style={{ background: "var(--color-ink)" }}
+      />
+
       {/* верхняя растушёвка под статус-баром */}
       <div aria-hidden className="edge-fade-top pointer-events-none fixed inset-x-0 top-0 z-20" />
 
@@ -151,6 +159,7 @@ function Shell() {
       />
       <Gallery open={modal === "gallery"} onClose={() => setModal(null)} />
       <Shop open={modal === "shop"} onClose={() => setModal(null)} />
+      <Wishlist open={modal === "wishlist"} onClose={() => setModal(null)} />
       <Goals open={modal === "goals"} onClose={() => setModal(null)} />
       <MonthSummary open={modal === "summary"} onClose={() => setModal(null)} />
 

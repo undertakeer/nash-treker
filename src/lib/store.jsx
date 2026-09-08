@@ -41,6 +41,7 @@ export function StoreProvider({ children }) {
   const [goals, setGoals] = useState(() => readCache("goals", []));
   const [tasks, setTasks] = useState(() => readCache("tasks", []));
   const [places, setPlaces] = useState(() => readCache("places", []));
+  const [wishlist, setWishlist] = useState(() => readCache("wishlist", []));
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
   const [queue, setQueue] = useState(() => readCache("queue", []));
@@ -85,11 +86,12 @@ export function StoreProvider({ children }) {
   useEffect(() => writeCache("goals", goals), [goals]);
   useEffect(() => writeCache("tasks", tasks), [tasks]);
   useEffect(() => writeCache("places", places), [places]);
+  useEffect(() => writeCache("wishlist", wishlist), [wishlist]);
 
   // ---------- загрузка ----------
   const loadAll = useCallback(async () => {
     if (!uid) return;
-    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl] = await Promise.all([
+    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl, wl] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("habits").select("*").order("position").order("created_at"),
       supabase.from("checkins").select("*"),
@@ -102,6 +104,7 @@ export function StoreProvider({ children }) {
       supabase.from("goals").select("*").order("created_at", { ascending: false }),
       supabase.from("tasks").select("*").order("position").order("created_at"),
       supabase.from("places").select("*").order("created_at", { ascending: false }),
+      supabase.from("wishlist").select("*").order("position").order("created_at"),
     ]);
     // при ошибке сети оставляем то, что уже лежит в кэше
     let people = p.error ? null : p.data || [];
@@ -131,6 +134,7 @@ export function StoreProvider({ children }) {
     if (!g.error) setGoals(g.data || []);
     if (!t.error) setTasks(t.data || []);
     if (!pl.error) setPlaces(pl.data || []);
+    if (!wl.error) setWishlist(wl.data || []);
     setLoading(false);
   }, [uid, session]);
 
@@ -170,6 +174,7 @@ export function StoreProvider({ children }) {
         else if (table === "goals") apply(setGoals);
         else if (table === "tasks") apply(setTasks);
         else if (table === "places") apply(setPlaces);
+        else if (table === "wishlist") apply(setWishlist);
         else if (table === "profiles") apply(setProfiles);
         else if (table === "achievements") apply(setAchievements);
         else if (table === "events") {
@@ -827,7 +832,7 @@ export function StoreProvider({ children }) {
 
   // ---------- места на карте ----------
   /** Кладёт снимок места в хранилище и возвращает пару ссылок */
-  const uploadPlacePhoto = useCallback(
+  const uploadPhotoFile = useCallback(
     async (file) => {
       const { full, thumb, type, ext } = await photoVariants(file);
       const base = `${uid}/places/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -851,7 +856,7 @@ export function StoreProvider({ children }) {
       let shot = {};
       if (file) {
         try {
-          shot = await uploadPlacePhoto(file);
+          shot = await uploadPhotoFile(file);
         } catch {
           showToast("Фото не загрузилось, место сохранили без него", "⚠️");
         }
@@ -872,7 +877,7 @@ export function StoreProvider({ children }) {
       showToast("Место на карте", data.emoji || "📍");
       return data;
     },
-    [uid, uploadPlacePhoto, showToast]
+    [uid, uploadPhotoFile, showToast]
   );
 
   const updatePlace = useCallback(
@@ -881,7 +886,7 @@ export function StoreProvider({ children }) {
       let shot = {};
       if (file) {
         try {
-          shot = await uploadPlacePhoto(file);
+          shot = await uploadPhotoFile(file);
         } catch {
           showToast("Фото не загрузилось", "⚠️");
         }
@@ -896,7 +901,7 @@ export function StoreProvider({ children }) {
       // старый снимок больше не нужен — иначе он навсегда останется в хранилище
       if (shot.photo_url && before?.photo_url) dropPhotoFiles(before);
     },
-    [places, uploadPlacePhoto, dropPhotoFiles, showToast]
+    [places, uploadPhotoFile, dropPhotoFiles, showToast]
   );
 
   const togglePlaceVisited = useCallback(
@@ -928,16 +933,92 @@ export function StoreProvider({ children }) {
     [updatePlace]
   );
 
+  // ---------- вишлист ----------
+  const createWishItem = useCallback(
+    async (fields, file) => {
+      if (!uid) return null;
+      let shot = {};
+      if (file) {
+        try {
+          shot = await uploadPhotoFile(file);
+        } catch {
+          showToast("Фото не загрузилось, сохранили без него", "⚠️");
+        }
+      }
+      const maxPos = wishlist.reduce((m, w) => Math.max(m, w.position || 0), 0);
+      const { data, error } = await supabase
+        .from("wishlist")
+        .insert({ owner_id: uid, ...fields, ...shot, position: maxPos + 1, created_by: uid })
+        .select()
+        .single();
+      if (error) {
+        showToast("Не удалось сохранить", "⚠️");
+        return null;
+      }
+      setWishlist((prev) => (prev.some((w) => w.id === data.id) ? prev : [...prev, data]));
+      showToast("Добавлено в вишлист", data.emoji || "🎁");
+      return data;
+    },
+    [uid, wishlist, uploadPhotoFile, showToast]
+  );
+
+  const updateWishItem = useCallback(
+    async (id, patch, file) => {
+      const before = wishlist.find((w) => w.id === id);
+      let shot = {};
+      if (file) {
+        try {
+          shot = await uploadPhotoFile(file);
+        } catch {
+          showToast("Фото не загрузилось", "⚠️");
+        }
+      }
+      const next = { ...patch, ...shot };
+      setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, ...next } : w)));
+      const { error } = await supabase.from("wishlist").update(next).eq("id", id);
+      if (error) {
+        showToast("Не удалось сохранить", "⚠️");
+        return;
+      }
+      if (shot.photo_url && before?.photo_url) dropPhotoFiles(before);
+    },
+    [wishlist, uploadPhotoFile, dropPhotoFiles, showToast]
+  );
+
+  const toggleWishItemGot = useCallback(
+    async (item) => {
+      const got = item.status === "got";
+      const patch = got
+        ? { status: "want", got_at: null, got_by: null }
+        : { status: "got", got_at: todayISO(), got_by: uid };
+      setWishlist((prev) => prev.map((w) => (w.id === item.id ? { ...w, ...patch } : w)));
+      await supabase.from("wishlist").update(patch).eq("id", item.id);
+      if (!got) showToast("Подарено 🎉", item.emoji || "🎁");
+    },
+    [uid, showToast]
+  );
+
+  const deleteWishItem = useCallback(
+    async (id) => {
+      const row = wishlist.find((w) => w.id === id);
+      setWishlist((prev) => prev.filter((w) => w.id !== id));
+      await supabase.from("wishlist").delete().eq("id", id);
+      if (row) dropPhotoFiles(row);
+      showToast("Удалено", "🗑");
+    },
+    [wishlist, dropPhotoFiles, showToast]
+  );
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
-    setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]); setPlaces([]);
+    setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]); setPlaces([]); setWishlist([]);
   }, []);
 
   const value = {
     session, uid, me, partner, profiles,
     habits, checkins, events, achievements, prefs,
-    freezes, wishes, purchases, goals, tasks, places, points, photos, freezesLeft,
+    freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeft,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
     toggleCheckin, nudge, react,
@@ -948,6 +1029,7 @@ export function StoreProvider({ children }) {
     createGoal, completeGoal, deleteGoal,
     createTask, updateTask, toggleTask, deleteTask, clearDoneTasks,
     createPlace, updatePlace, togglePlaceVisited, deletePlace, attachPlacePhoto,
+    createWishItem, updateWishItem, toggleWishItemGot, deleteWishItem,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 

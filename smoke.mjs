@@ -84,6 +84,10 @@ if (process.argv[3] === "auth") {
     { id: "pl1", title: "Скамейка у Ц-1", emoji: "🪑", color: "lime", category: "bench", note: "в тени, спиной к дороге", lat: 41.3162, lng: 69.2797, status: "want", created_by: uid, created_at: new Date().toISOString() },
     { id: "pl2", title: "Чайхана на Навои", emoji: "☕️", color: "sand", category: "cafe", lat: 41.3211, lng: 69.2497, status: "visited", visited_at: today, created_by: pid, created_at: new Date().toISOString() },
   ]);
+  put("wishlist", [
+    { id: "wl1", owner_id: uid, title: "Кроссовки New Balance 530", emoji: "👟", color: "violet", price: 1200000, currency: "сум", url: "https://asaxiy.uz/product/nb530", note: "размер 42, серые", priority: 1, status: "want", position: 1, created_by: uid, created_at: new Date().toISOString() },
+    { id: "wl2", owner_id: pid, title: "Наушники", emoji: "🎧", color: "pink", price: 90, currency: "$", status: "want", position: 2, created_by: pid, created_at: new Date().toISOString() },
+  ]);
   put("tasks", [
     { id: "t1", title: "Купить корм коту", emoji: "🛒", color: "sky", done: false, due_date: today, due_time: "18:00", assignee_id: null, priority: 1, position: 0, created_at: new Date().toISOString() },
     { id: "t2", title: "Записаться к врачу", emoji: "🏥", color: "rose", done: false, due_date: null, assignee_id: uid, priority: 0, position: 1, created_at: new Date().toISOString() },
@@ -144,6 +148,9 @@ if (mounted && process.argv[3] === "auth") {
   await click("Отмена");
   await click("Мы");
   await click("Галерея");   await click("Закрыть");
+  await click("Вишлист");
+  await click("Кроссовки");  await click("Отмена");
+  await click("Закрыть");
   await click("Магазин");   await click("Закрыть");
   await click("Цели");      await click("Закрыть");
   await click("Итоги");     await click("Закрыть");
