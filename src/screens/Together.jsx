@@ -71,7 +71,7 @@ export default function Together({ onOpen }) {
   const feed = useMemo(() => events.filter((e) => e.type !== "nudge" || e.actor_id === uid), [events, uid]);
 
   return (
-    <div className="px-4 pb-32">
+    <div className="px-4 pb-8">
       <header className="safe-top pt-2 pb-5">
         <div className="text-[12px] font-bold tracking-[0.14em] text-white/35 uppercase mb-1">Вместе</div>
         <h1 className="text-[29px] font-extrabold tracking-tight leading-none">Мы</h1>

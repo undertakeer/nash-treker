@@ -42,7 +42,7 @@ export default function Today({ onOpenHabit, onBurst }) {
   }
 
   return (
-    <div className="px-4 pb-32">
+    <div className="px-4 pb-8">
       <header className="safe-top pt-2 pb-5">
         <div className="text-[12px] font-bold tracking-[0.14em] text-white/35 uppercase mb-1">
           {dateLine}

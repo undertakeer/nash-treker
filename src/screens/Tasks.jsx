@@ -86,7 +86,7 @@ export default function Tasks({ onOpenTask, onCreate, onBurst }) {
   }
 
   return (
-    <div className="px-4 pb-32">
+    <div className="px-4 pb-8">
       <header className="safe-top pt-2 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div>

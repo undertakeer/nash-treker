@@ -65,7 +65,7 @@ export default function Home({ onOpenHabit, onCreate, onBurst }) {
   }
 
   return (
-    <div className="px-4 pb-32">
+    <div className="px-4 pb-8">
       <header className="safe-top pt-2 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div>

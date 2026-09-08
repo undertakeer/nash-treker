@@ -49,10 +49,13 @@ function Shell() {
 
   if (!session) return <Auth />;
 
+  // Раскладка ровно в высоту экрана: шапка-баннер, прокручиваемая середина,
+  // таб-бар обычным блоком снизу. Раньше таб-бар был position: fixed и на iOS
+  // гулял по вертикали вместе с макетным вьюпортом.
   return (
-    <div className="min-h-full max-w-[520px] mx-auto">
+    <div className="h-[100dvh] flex flex-col max-w-[520px] mx-auto">
       {(!online || pendingCount > 0) && (
-        <div className="sticky top-0 z-30 text-center text-[12px] font-semibold py-1.5 bg-amber-400/12 text-amber-200/85 backdrop-blur-md">
+        <div className="relative z-30 shrink-0 text-center text-[12px] font-semibold py-1.5 bg-amber-400/12 text-amber-200/85">
           {online
             ? `Досинхронизируем ${pendingCount} отметок…`
             : "Офлайн — отметки сохранятся и уедут позже"}
@@ -62,6 +65,7 @@ function Shell() {
       <AnimatePresence mode="wait">
         <motion.main
           key={tab}
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}

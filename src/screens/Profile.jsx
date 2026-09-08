@@ -94,7 +94,7 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   const accent = me?.accent || "mint";
 
   return (
-    <div className="px-4 pb-32">
+    <div className="px-4 pb-8">
       <header className="safe-top pt-2 pb-5">
         <h1 className="text-[29px] font-extrabold tracking-tight">Профиль</h1>
       </header>
