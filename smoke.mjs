@@ -80,6 +80,10 @@ if (process.argv[3] === "auth") {
   put("purchases", [{ id: "pu1", buyer_id: pid, title: "Кино", emoji: "🎬", price: 50, status: "pending", created_at: new Date().toISOString() }]);
   put("goals", [{ id: "g1", title: "30 дней зала", emoji: "🎯", reward: "Ужин", habit_id: "h1", target: 30, created_at: "2026-08-01T00:00:00Z" }]);
   put("prefs", { user_id: uid, reminders: true });
+  put("places", [
+    { id: "pl1", title: "Скамейка у Ц-1", emoji: "🪑", color: "lime", category: "bench", note: "в тени, спиной к дороге", lat: 41.3162, lng: 69.2797, status: "want", created_by: uid, created_at: new Date().toISOString() },
+    { id: "pl2", title: "Чайхана на Навои", emoji: "☕️", color: "sand", category: "cafe", lat: 41.3211, lng: 69.2497, status: "visited", visited_at: today, created_by: pid, created_at: new Date().toISOString() },
+  ]);
   put("tasks", [
     { id: "t1", title: "Купить корм коту", emoji: "🛒", color: "sky", done: false, due_date: today, due_time: "18:00", assignee_id: null, priority: 1, position: 0, created_at: new Date().toISOString() },
     { id: "t2", title: "Записаться к врачу", emoji: "🏥", color: "rose", done: false, due_date: null, assignee_id: uid, priority: 0, position: 1, created_at: new Date().toISOString() },
@@ -128,6 +132,16 @@ if (mounted && process.argv[3] === "auth") {
   await click("Сегодня");
   await click("Задачи");
   await click("Купить корм");   await click("Отмена");
+  await click("Карта");
+  steps.push(
+    g.document.querySelector(".leaflet-container")
+      ? "ок: карта поднялась"
+      : "УПАЛО: контейнер карты не создан"
+  );
+  await click("Список");
+  await click("Скамейка у Ц-1");
+  await click("Изменить");
+  await click("Отмена");
   await click("Мы");
   await click("Галерея");   await click("Закрыть");
   await click("Магазин");   await click("Закрыть");

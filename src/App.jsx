@@ -5,7 +5,10 @@ import Auth from "./screens/Auth";
 import Home from "./screens/Home";
 import Today from "./screens/Today";
 import Tasks from "./screens/Tasks";
+import MapScreen from "./screens/MapScreen";
 import TaskEditor from "./screens/TaskEditor";
+import PlaceEditor from "./screens/PlaceEditor";
+import PlaceDetail from "./screens/PlaceDetail";
 import Together from "./screens/Together";
 import Gallery from "./screens/Gallery";
 import Shop from "./screens/Shop";
@@ -21,13 +24,15 @@ import Confetti from "./components/Confetti";
 import InstallHint from "./components/InstallHint";
 
 function Shell() {
-  const { session, toast, online, pendingCount } = useStore();
+  const { session, toast, online, pendingCount, places } = useStore();
   const [tab, setTab] = useState("home");
   const [openHabit, setOpenHabit] = useState(null);
   const [editor, setEditor] = useState({ open: false, habit: null });
   const [notifOpen, setNotifOpen] = useState(false);
   const [modal, setModal] = useState(null); // gallery | shop | goals | summary
   const [taskEditor, setTaskEditor] = useState({ open: false, task: null });
+  const [placeEditor, setPlaceEditor] = useState({ open: false, place: null, draft: null });
+  const [openPlace, setOpenPlace] = useState(null);
   const [burst, setBurst] = useState(null);
 
   const fireBurst = useCallback((colorKey) => {
@@ -86,6 +91,12 @@ function Shell() {
               onBurst={fireBurst}
             />
           )}
+          {tab === "map" && (
+            <MapScreen
+              onCreateAt={(pos) => setPlaceEditor({ open: true, place: null, draft: pos })}
+              onOpenPlace={setOpenPlace}
+            />
+          )}
           {tab === "together" && <Together onOpen={setModal} />}
           {tab === "profile" && (
             <Profile onOpenNotifications={() => setNotifOpen(true)} onOpen={setModal} />
@@ -119,6 +130,24 @@ function Shell() {
         open={taskEditor.open}
         task={taskEditor.task}
         onClose={() => setTaskEditor({ open: false, task: null })}
+      />
+
+      {openPlace && (
+        <PlaceDetail
+          place={places.find((p) => p.id === openPlace.id) || openPlace}
+          onClose={() => setOpenPlace(null)}
+          onEdit={(p) => {
+            setOpenPlace(null);
+            setTimeout(() => setPlaceEditor({ open: true, place: p, draft: null }), 260);
+          }}
+        />
+      )}
+
+      <PlaceEditor
+        open={placeEditor.open}
+        place={placeEditor.place}
+        draft={placeEditor.draft}
+        onClose={() => setPlaceEditor({ open: false, place: null, draft: null })}
       />
       <Gallery open={modal === "gallery"} onClose={() => setModal(null)} />
       <Shop open={modal === "shop"} onClose={() => setModal(null)} />

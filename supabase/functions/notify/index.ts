@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     const actorId = userData?.user?.id;
     if (!actorId) return json({ error: "unauthorized" }, 401);
 
-    const { kind, habit_id, target_id, purchase_id } = await req.json();
+    const { kind, habit_id, target_id, purchase_id, place_id } = await req.json();
     const admin = adminClient();
 
     // покупка желания: партнёру прилетает заказ на исполнение
@@ -38,6 +38,32 @@ Deno.serve(async (req) => {
           title: `${purchase.emoji} ${purchase.title}`,
           body: `${shortName(buyer?.display_name)} ${verb(buyer?.display_name, "потратил", "потратила")} ${purchase.price} баллов — пора исполнять`,
           tag: `purchase-${purchase.id}`,
+        });
+      }
+      return json({ ok: true, sent: done });
+    }
+
+    // новое место на карте: партнёру прилетает, что и где отметили
+    if (kind === "place") {
+      const { data: place } = await admin
+        .from("places").select("*").eq("id", place_id).maybeSingle();
+      if (!place) return json({ error: "place not found" }, 404);
+
+      const { data: people } = await admin.from("profiles").select("*");
+      const author = people?.find((p) => p.id === place.created_by);
+      const others = people?.filter((p) => p.id !== place.created_by) ?? [];
+      let done = 0;
+      for (const person of others) {
+        const { data: prefs } = await admin
+          .from("notification_prefs").select("*").eq("user_id", person.id).maybeSingle();
+        if (prefs?.places === false) continue;
+        const { minutes } = localParts(person.timezone || "UTC");
+        if (inQuietHours(minutes, prefs?.quiet_from, prefs?.quiet_to)) continue;
+
+        done += await sendToUser(admin, person.id, {
+          title: `${place.emoji} ${place.title}`,
+          body: `${shortName(author?.display_name)} ${verb(author?.display_name, "отметил", "отметила")} место на карте`,
+          tag: `place-${place.id}`,
         });
       }
       return json({ ok: true, sent: done });

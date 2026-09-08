@@ -63,3 +63,29 @@ input, textarea { font-size: 16px; }   /* иначе iOS зумит поле п�
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite linear;
 }
+
+/* ---------- карта ---------- */
+.leaflet-container { background: #0B0B10; font-family: inherit; }
+.leaflet-control-attribution {
+  background: rgba(8, 8, 11, .6) !important;
+  color: rgba(255, 255, 255, .35) !important;
+  font-size: 9px !important;
+  padding: 1px 5px !important;
+}
+.leaflet-control-attribution a { color: rgba(255, 255, 255, .5) !important; }
+
+.place-pin {
+  width: 36px; height: 36px; border-radius: 999px;
+  display: grid; place-items: center; font-size: 17px;
+  background: #14141A;
+  border: 2px solid var(--pin);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .55);
+  transition: transform .18s cubic-bezier(.2, .9, .3, 1.4);
+}
+.place-pin.is-active { transform: scale(1.22); background: var(--pin); }
+
+.me-dot {
+  width: 18px; height: 18px; border-radius: 999px;
+  background: #4C8DFF; border: 2.5px solid #fff;
+  box-shadow: 0 0 0 6px rgba(76, 141, 255, .22);
+}

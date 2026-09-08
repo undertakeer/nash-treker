@@ -40,6 +40,7 @@ export function StoreProvider({ children }) {
   const [purchases, setPurchases] = useState(() => readCache("purchases", []));
   const [goals, setGoals] = useState(() => readCache("goals", []));
   const [tasks, setTasks] = useState(() => readCache("tasks", []));
+  const [places, setPlaces] = useState(() => readCache("places", []));
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
   const [queue, setQueue] = useState(() => readCache("queue", []));
@@ -83,11 +84,12 @@ export function StoreProvider({ children }) {
   useEffect(() => writeCache("purchases", purchases), [purchases]);
   useEffect(() => writeCache("goals", goals), [goals]);
   useEffect(() => writeCache("tasks", tasks), [tasks]);
+  useEffect(() => writeCache("places", places), [places]);
 
   // ---------- загрузка ----------
   const loadAll = useCallback(async () => {
     if (!uid) return;
-    const [p, h, c, e, a, pr, fz, w, pu, g, t] = await Promise.all([
+    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("habits").select("*").order("position").order("created_at"),
       supabase.from("checkins").select("*"),
@@ -99,6 +101,7 @@ export function StoreProvider({ children }) {
       supabase.from("purchases").select("*").order("created_at", { ascending: false }).limit(60),
       supabase.from("goals").select("*").order("created_at", { ascending: false }),
       supabase.from("tasks").select("*").order("position").order("created_at"),
+      supabase.from("places").select("*").order("created_at", { ascending: false }),
     ]);
     // при ошибке сети оставляем то, что уже лежит в кэше
     let people = p.error ? null : p.data || [];
@@ -127,6 +130,7 @@ export function StoreProvider({ children }) {
     if (!pu.error) setPurchases(pu.data || []);
     if (!g.error) setGoals(g.data || []);
     if (!t.error) setTasks(t.data || []);
+    if (!pl.error) setPlaces(pl.data || []);
     setLoading(false);
   }, [uid, session]);
 
@@ -165,6 +169,7 @@ export function StoreProvider({ children }) {
         else if (table === "purchases") apply(setPurchases);
         else if (table === "goals") apply(setGoals);
         else if (table === "tasks") apply(setTasks);
+        else if (table === "places") apply(setPlaces);
         else if (table === "profiles") apply(setProfiles);
         else if (table === "achievements") apply(setAchievements);
         else if (table === "events") {
@@ -820,16 +825,119 @@ export function StoreProvider({ children }) {
     showToast(`Убрано ${ids.length}`, "🧹");
   }, [tasks, showToast]);
 
+  // ---------- места на карте ----------
+  /** Кладёт снимок места в хранилище и возвращает пару ссылок */
+  const uploadPlacePhoto = useCallback(
+    async (file) => {
+      const { full, thumb, type, ext } = await photoVariants(file);
+      const base = `${uid}/places/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const [up1, up2] = await Promise.all([
+        supabase.storage.from("moments").upload(`${base}.${ext}`, full, { contentType: type, upsert: true }),
+        supabase.storage.from("moments").upload(`${base}-s.${ext}`, thumb, { contentType: type, upsert: true }),
+      ]);
+      if (up1.error) throw up1.error;
+      if (up2.error) throw up2.error;
+      return {
+        photo_url: supabase.storage.from("moments").getPublicUrl(`${base}.${ext}`).data.publicUrl,
+        thumb_url: supabase.storage.from("moments").getPublicUrl(`${base}-s.${ext}`).data.publicUrl,
+      };
+    },
+    [uid]
+  );
+
+  const createPlace = useCallback(
+    async (fields, file) => {
+      if (!uid) return null;
+      let shot = {};
+      if (file) {
+        try {
+          shot = await uploadPlacePhoto(file);
+        } catch {
+          showToast("Фото не загрузилось, место сохранили без него", "⚠️");
+        }
+      }
+      const { data, error } = await supabase
+        .from("places")
+        .insert({ ...fields, ...shot, created_by: uid })
+        .select()
+        .single();
+      if (error) {
+        showToast("Не удалось сохранить место", "⚠️");
+        return null;
+      }
+      setPlaces((prev) => (prev.some((x) => x.id === data.id) ? prev : [data, ...prev]));
+      supabase.functions
+        .invoke("notify", { body: { kind: "place", place_id: data.id } })
+        .catch(() => {});
+      showToast("Место на карте", data.emoji || "📍");
+      return data;
+    },
+    [uid, uploadPlacePhoto, showToast]
+  );
+
+  const updatePlace = useCallback(
+    async (id, patch, file) => {
+      const before = places.find((x) => x.id === id);
+      let shot = {};
+      if (file) {
+        try {
+          shot = await uploadPlacePhoto(file);
+        } catch {
+          showToast("Фото не загрузилось", "⚠️");
+        }
+      }
+      const next = { ...patch, ...shot };
+      setPlaces((prev) => prev.map((x) => (x.id === id ? { ...x, ...next } : x)));
+      const { error } = await supabase.from("places").update(next).eq("id", id);
+      if (error) {
+        showToast("Не удалось сохранить", "⚠️");
+        return;
+      }
+      // старый снимок больше не нужен — иначе он навсегда останется в хранилище
+      if (shot.photo_url && before?.photo_url) dropPhotoFiles(before);
+    },
+    [places, uploadPlacePhoto, dropPhotoFiles, showToast]
+  );
+
+  const togglePlaceVisited = useCallback(
+    async (place) => {
+      const visited = place.status === "visited";
+      const patch = visited
+        ? { status: "want", visited_at: null }
+        : { status: "visited", visited_at: todayISO() };
+      setPlaces((prev) => prev.map((x) => (x.id === place.id ? { ...x, ...patch } : x)));
+      await supabase.from("places").update(patch).eq("id", place.id);
+      if (!visited) showToast("Отмечено: были", "✅");
+    },
+    [showToast]
+  );
+
+  const deletePlace = useCallback(
+    async (id) => {
+      const row = places.find((x) => x.id === id);
+      setPlaces((prev) => prev.filter((x) => x.id !== id));
+      await supabase.from("places").delete().eq("id", id);
+      if (row) dropPhotoFiles(row);
+      showToast("Место удалено", "🗑");
+    },
+    [places, dropPhotoFiles, showToast]
+  );
+
+  const attachPlacePhoto = useCallback(
+    (place, file) => updatePlace(place.id, {}, file),
+    [updatePlace]
+  );
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
-    setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]);
+    setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]); setPlaces([]);
   }, []);
 
   const value = {
     session, uid, me, partner, profiles,
     habits, checkins, events, achievements, prefs,
-    freezes, wishes, purchases, goals, tasks, points, photos, freezesLeft,
+    freezes, wishes, purchases, goals, tasks, places, points, photos, freezesLeft,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
     toggleCheckin, nudge, react,
@@ -839,6 +947,7 @@ export function StoreProvider({ children }) {
     createWish, updateWish, deleteWish, buyWish, markPurchaseDone, cancelPurchase,
     createGoal, completeGoal, deleteGoal,
     createTask, updateTask, toggleTask, deleteTask, clearDoneTasks,
+    createPlace, updatePlace, togglePlaceVisited, deletePlace, attachPlacePhoto,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 
