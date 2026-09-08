@@ -23,6 +23,16 @@ Deno.serve(async (req) => {
     const { kind, habit_id, target_id, purchase_id, place_id } = await req.json();
     const admin = adminClient();
 
+    // проверка связи: пуш самому себе, чтобы видеть, где рвётся цепочка
+    if (kind === "test") {
+      const sent = await sendToUser(admin, actorId, {
+        title: "🔔 Проверка связи",
+        body: "Уведомления работают. Примерно так они и будут выглядеть.",
+        tag: "test",
+      });
+      return json({ ok: true, sent });
+    }
+
     // покупка желания: партнёру прилетает заказ на исполнение
     if (kind === "purchase") {
       const { data: purchase } = await admin

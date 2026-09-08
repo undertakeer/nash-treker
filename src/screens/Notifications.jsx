@@ -2,16 +2,42 @@ import { useEffect, useState } from "react";
 import Sheet from "../components/Sheet";
 import { Button, Card, Row, Switch } from "../components/ui";
 import { useStore } from "../lib/store";
-import { disablePush, enablePush, isIOS, isStandalone, pushState } from "../lib/push";
+import {
+  disablePush, enablePush, isIOS, isStandalone, pushState, sendTestPush, subscriptionCount,
+} from "../lib/push";
 
 export default function Notifications({ open, onClose }) {
   const { prefs, updatePrefs, uid, habits, updateHabit, showToast } = useStore();
   const [state, setState] = useState("checking");
   const [busy, setBusy] = useState(false);
+  const [devices, setDevices] = useState(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
-    if (open) pushState().then(setState);
-  }, [open]);
+    if (!open) return;
+    pushState().then(setState);
+    subscriptionCount(uid).then(setDevices);
+    setTestResult(null);
+  }, [open, uid]);
+
+  async function runTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await sendTestPush();
+      setTestResult(
+        res?.sent
+          ? { ok: true, text: "Отправлено. Уведомление придёт в течение пары секунд." }
+          : { ok: false, text: "Сервер сработал, но отправлять некуда: это устройство не подписано. Нажмите «Включить» выше." }
+      );
+    } catch (e) {
+      setTestResult({ ok: false, text: e.message });
+    } finally {
+      setTesting(false);
+      subscriptionCount(uid).then(setDevices);
+    }
+  }
 
   async function toggle() {
     setBusy(true);
@@ -74,6 +100,40 @@ export default function Notifications({ open, onClose }) {
             >
               {state === "on" ? "Выключить" : "Включить"}
             </Button>
+          </div>
+        </Card>
+
+        <h3 className="text-[13px] font-bold tracking-[0.1em] uppercase text-white/30 mb-2.5 px-1">Проверка</h3>
+        <Card className="divide-y divide-white/6 mb-5">
+          <CheckRow
+            ok={!isIOS() || isStandalone()}
+            label="Открыто с домашнего экрана"
+            hint="На iPhone из вкладки Safari пуши не работают вообще — только у приложения с иконкой."
+          />
+          <CheckRow
+            ok={state === "on"}
+            label="Телефон подписан"
+            hint={state === "denied"
+              ? "Разрешение отозвано: Настройки → Уведомления → Наш трекер."
+              : "Кнопка «Включить» выше."}
+          />
+          <CheckRow
+            ok={devices > 0}
+            label={devices === null ? "Устройств в базе: …" : `Устройств в базе: ${devices}`}
+            hint="Сюда записывается каждый телефон, где вы включили уведомления."
+          />
+          <div className="px-4 py-4">
+            <Button onClick={runTest} disabled={testing} variant="ghost">
+              {testing ? "Отправляем…" : "Прислать тестовое"}
+            </Button>
+            {testResult && (
+              <div
+                className="mt-3 text-[13px] leading-relaxed"
+                style={{ color: testResult.ok ? "rgba(255,255,255,.6)" : "#FF9A8B" }}
+              >
+                {testResult.ok ? "✅ " : "⚠️ "}{testResult.text}
+              </div>
+            )}
           </div>
         </Card>
 
@@ -171,6 +231,18 @@ function TimeRow({ label, value, onChange }) {
         onChange={(e) => onChange(e.target.value)}
         className="bg-white/8 rounded-xl px-3 py-1.5 text-[15px] font-semibold outline-none"
       />
+    </div>
+  );
+}
+
+function CheckRow({ ok, label, hint }) {
+  return (
+    <div className="flex items-start gap-3 px-4 py-3.5">
+      <span className="text-[15px] leading-6 shrink-0">{ok ? "✅" : "⚠️"}</span>
+      <div className="min-w-0">
+        <div className="text-[14.5px] font-semibold">{label}</div>
+        {!ok && hint && <div className="text-[12.5px] text-white/40 mt-0.5 leading-relaxed">{hint}</div>}
+      </div>
     </div>
   );
 }

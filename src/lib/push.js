@@ -75,3 +75,34 @@ export async function disablePush() {
     await sub.unsubscribe();
   }
 }
+
+/** Сколько устройств этого пользователя лежит в базе */
+export async function subscriptionCount(userId) {
+  if (!userId) return 0;
+  const { count, error } = await supabase
+    .from("push_subscriptions")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId);
+  return error ? 0 : count || 0;
+}
+
+/** Просит сервер прислать пуш самому себе — проверка всей цепочки целиком */
+export async function sendTestPush() {
+  const { data, error } = await supabase.functions.invoke("notify", { body: { kind: "test" } });
+  if (!error) return data;
+
+  const status = error.context?.status;
+  if (status === undefined) {
+    throw new Error("Сервер не отвечает. Функция notify ещё не выложена в Supabase.");
+  }
+  if (status === 404) {
+    throw new Error("Функция notify не найдена — её нужно выложить в Supabase.");
+  }
+  let detail = "";
+  try {
+    detail = (await error.context.json())?.error || "";
+  } catch {
+    /* тело ответа не JSON — покажем что есть */
+  }
+  throw new Error(detail || error.message || `Сервер ответил ошибкой ${status}`);
+}
