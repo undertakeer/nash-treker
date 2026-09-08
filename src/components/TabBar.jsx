@@ -16,6 +16,18 @@ const TABS = [
 /** Сколько вкладок помещается в ряд одновременно, остальные — прокруткой */
 const VISIBLE = 4;
 
+/** Вертикальный сдвиг плашки. Отрицательное — опускаем за нижний край экрана
+    и возвращаем это место контенту. Высоту в минус CSS не пускает, это её замена.
+    Под плашкой остаётся SAFE_TRIM-вычет плюс SHIFT, сейчас это ~14px: ровно
+    столько, чтобы не налезть на домашний индикатор. */
+const SHIFT = -6;
+
+/** Отступ под домашним индикатором: сколько срезаем от системных 34pt */
+const SAFE_TRIM = 14;
+
+/** Минимум для телефонов без индикатора, где системный отступ нулевой */
+const SAFE_MIN = 12;
+
 export default function TabBar({ tab, onChange }) {
   const scroller = useRef(null);
 
@@ -30,13 +42,21 @@ export default function TabBar({ tab, onChange }) {
   }, [tab]);
 
   return (
-    <nav className="relative shrink-0" style={{ background: "var(--color-ink)" }}>
+    <nav
+      className="relative shrink-0"
+      style={{ background: "var(--color-ink)", marginBottom: SHIFT }}
+    >
       {/* контент растворяется в фоне, а не обрывается о таб-бар */}
       <div
         aria-hidden
         className="edge-fade-bottom pointer-events-none absolute inset-x-0 bottom-full h-10"
       />
-      <div className="px-4 pt-1 pb-[max(calc(env(safe-area-inset-bottom)-14px),8px)]">
+      <div
+        className="px-4 pt-0.5"
+        style={{
+          paddingBottom: `max(calc(env(safe-area-inset-bottom) - ${SAFE_TRIM}px), ${SAFE_MIN}px)`,
+        }}
+      >
         <div className="rounded-[20px] bg-[#16161C] border border-white/10 p-1">
           <div ref={scroller} className="flex overflow-x-auto no-scrollbar scroll-smooth">
             {TABS.map(({ id, label, Icon }) => {
