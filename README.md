@@ -130,15 +130,18 @@ Supabase внутри всё равно хранит адрес, поэтому 
 | `CRON_SECRET` | любая длинная случайная строка |
 | `SERVICE_KEY` | secret key вида `sb_secret_…` из Settings → API Keys |
 
-**4.2. Функции.** Supabase → **Edge Functions → Deploy a new function**,
-редактор прямо в браузере:
+**4.2. Функции.** Supabase → **Edge Functions → Deploy a new function → Via
+Editor**. Редактор разворачивает одну функцию за раз и соседнюю папку не видит,
+поэтому вставлять нужно **склеенные** версии из `supabase/functions/bundled/` —
+в них общий код уже внутри:
 
-- `notify` — код из `supabase/functions/notify/index.ts`, **Verify JWT: включено**
-- `cron-reminders` — код из `supabase/functions/cron-reminders/index.ts`,
+- `notify` — содержимое `supabase/functions/bundled/notify.ts`,
+  **Verify JWT: включено**
+- `cron-reminders` — содержимое `supabase/functions/bundled/cron-reminders.ts`,
   **Verify JWT: выключено** (защита идёт через `CRON_SECRET`)
 
-Обе используют общий файл `supabase/functions/_shared/push.ts` — его нужно
-положить рядом в той же структуре папок.
+Править нужно исходники в `notify/`, `cron-reminders/` и `_shared/push.ts`,
+а потом пересобрать: `npm run bundle:functions`.
 
 **4.3. Расписание.** SQL Editor → `supabase/cron.sql`, подставив свой
 `CRON_SECRET` вместо заглушки → Run.

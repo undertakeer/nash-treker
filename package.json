@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "smoke": "vite build && node ./smoke.mjs dist && node ./smoke.mjs dist auth",
     "lint": "eslint src",
-    "check": "npm run lint && npm run smoke"
+    "check": "npm run lint && npm run smoke && npm run bundle:functions",
+    "bundle:functions": "node ./scripts/bundle-functions.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
