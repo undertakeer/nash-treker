@@ -1,6 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 // в maplibre-gl 6 нет default-экспорта, только именованные
-import { Map as MlMap, Marker } from "maplibre-gl";
+import { Map as MlMap, Marker, setWorkerUrl } from "maplibre-gl";
+// Свой воркер вместо того, что MapLibre ищет рядом со своим файлом: после
+// сборки он оказывается по несуществующему адресу, воркер молча падает и
+// карта остаётся пустой. Vite соберёт его отдельным файлом и даст ссылку.
+import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { hex } from "../lib/theme";
 import { TASHKENT } from "../lib/places";
@@ -8,6 +12,8 @@ import { TASHKENT } from "../lib/places";
 // Векторные тайлы OpenFreeMap — бесплатно и без ключа. Палитра наша,
 // собирается из тёмного стиля OpenFreeMap: scripts/build-map-style.mjs
 const STYLE = new URL("map-style.json", document.baseURI).href;
+setWorkerUrl(mapWorkerUrl);
+
 const LONG_PRESS_MS = 520;
 const LONG_PRESS_SLOP = 12; // px: сдвинул палец — значит не удержание, а панорама
 
@@ -65,7 +71,16 @@ const MapCanvas = forwardRef(function MapCanvas(
     m.touchZoomRotate?.disableRotation();
     m.on("load", () => { ready.current = true; });
     m.on("error", (e) => console.warn("карта:", e?.error?.message || e));
+    // состояние наружу: по нему браузерный тест понимает, что карта дорисована
+    host.current.dataset.map = "loading";
+    m.on("idle", () => { if (host.current) host.current.dataset.map = "ready"; });
     map.current = m;
+
+    // Контейнер получает высоту уже после монтирования (flex + анимация входа),
+    // а MapLibre снимает размер один раз при создании и сам его не пересчитывает.
+    // Без этого канвас остаётся 400x300 и карта выглядит чёрной.
+    const ro = new ResizeObserver(() => m.resize());
+    ro.observe(host.current);
 
     // долгое нажатие: contextmenu на iOS по удержанию не приходит
     let timer = null;
@@ -97,6 +112,7 @@ const MapCanvas = forwardRef(function MapCanvas(
     m.on("contextmenu", (e) => cb.current.onLongPress?.({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
 
     return () => {
+      ro.disconnect();
       cancel();
       el.removeEventListener("touchstart", onDown);
       el.removeEventListener("touchmove", onMove);
@@ -153,7 +169,7 @@ const MapCanvas = forwardRef(function MapCanvas(
 
   if (failed) {
     return (
-      <div className="absolute inset-0 grid place-items-center px-8 text-center">
+      <div className="w-full h-full grid place-items-center px-8 text-center">
         <div>
           <div className="text-[34px] mb-2">🗺</div>
           <div className="text-[14px] font-bold mb-1">Карта не открылась</div>
@@ -163,7 +179,9 @@ const MapCanvas = forwardRef(function MapCanvas(
     );
   }
 
-  return <div ref={host} className="absolute inset-0" />;
+  // Размер задаём процентами, а не inset-0: MapLibre навязывает контейнеру
+  // position: relative своим css, и абсолютное позиционирование ломается.
+  return <div ref={host} className="w-full h-full" />;
 });
 
 export default MapCanvas;

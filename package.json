@@ -11,7 +11,8 @@
     "lint": "eslint src",
     "check": "npm run lint && npm run smoke && npm run bundle:functions",
     "bundle:functions": "node ./scripts/bundle-functions.mjs",
-    "map:style": "node ./scripts/build-map-style.mjs"
+    "map:style": "node ./scripts/build-map-style.mjs",
+    "visual": "node ./visual.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
@@ -28,6 +29,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.12.0",
     "jsdom": "^29.1.1",
+    "puppeteer-core": "^24.43.1",
     "tailwindcss": "^4.1.13",
     "vite": "^7.1.5"
   }

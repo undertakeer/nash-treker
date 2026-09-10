@@ -258,9 +258,24 @@ supabase/functions/           две edge-функции
   при первом обращении. Расписание pg_cron ходит каждые 5 минут, так что на
   практике он не спит.
 
+### Проверки
+
+```bash
+npm run check     # eslint + прогон сборки в jsdom (smoke.mjs)
+npm run visual    # настоящий Chrome: скриншоты экранов, проверка что карта отрисовалась
+```
+
+`visual.mjs` нужен, потому что jsdom не умеет WebGL и карту не видит совсем.
+Он поднимает `vite preview`, подкладывает тестовые данные из `seed.mjs`,
+проходит по вкладкам и складывает снимки в `screenshots/`. Если Chrome или
+`puppeteer-core` не найдены — тихо пропускается. Можно указать свой адрес:
+`npm run visual -- http://localhost:5173`.
+
 ### Карта
 
 Векторные тайлы [OpenFreeMap](https://openfreemap.org) — бесплатно, без ключа,
-рисует MapLibre GL. Палитра своя: `public/map-style.json` собирается из тёмного
+рисует MapLibre GL. Воркер MapLibre собирается через `?worker&url`: сам он ищет
+свой файл рядом со своим модулем, а после сборки его там нет — воркер молча
+падает, и карта остаётся пустой. Палитра своя: `public/map-style.json` собирается из тёмного
 стиля OpenFreeMap скриптом `scripts/build-map-style.mjs` — цвета правятся там,
 в объекте `P`, потом `npm run map:style`.
