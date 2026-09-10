@@ -103,8 +103,13 @@ const assetDir = path.join(dist, "assets");
 const js = fs.readdirSync(assetDir).find((f) => f.endsWith(".js"));
 const code = fs.readFileSync(path.join(assetDir, js), "utf8");
 
+// jsdom не умеет ES-модули, а бандл содержит import.meta (его тянет maplibre)
+const shimmed = code.replace(/\bimport\.meta\b/g, "__importMeta");
+
 try {
-  new Function("window", "document", "self", "globalThis", code)(g, g.document, g, globalThis);
+  new Function("window", "document", "self", "globalThis", "__importMeta", shimmed)(
+    g, g.document, g, globalThis, { url: "http://localhost/" },
+  );
 } catch (e) {
   errors.push("THROW: " + e.message);
 }
@@ -137,11 +142,18 @@ if (mounted && process.argv[3] === "auth") {
   await click("Задачи");
   await click("Купить корм");   await click("Отмена");
   await click("Карта");
-  steps.push(
-    g.document.querySelector(".leaflet-container")
-      ? "ок: карта поднялась"
-      : "УПАЛО: контейнер карты не создан"
-  );
+  // WebGL в jsdom нет, поэтому карта честно уходит в заглушку — проверяем,
+  // что экран показал хоть что-то из двух, а не белое пятно
+  {
+    const t = (g.document.getElementById("root").textContent || "");
+    const okMap = g.document.querySelector(".maplibregl-map");
+    const okFallback = t.includes("Карта не открылась");
+    steps.push(
+      okMap || okFallback
+        ? `ок: экран карты (${okMap ? "карта" : "заглушка"})`
+        : "УПАЛО: экран карты пустой"
+    );
+  }
   await click("Список");
   await click("Скамейка у Ц-1");
   await click("Изменить");

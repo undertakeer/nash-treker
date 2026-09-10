@@ -81,21 +81,14 @@ input, textarea { font-size: 16px; }   /* иначе iOS зумит поле п�
 }
 
 /* ---------- карта ---------- */
-.leaflet-container { background: #0B0B10; font-family: inherit; }
-.leaflet-control-attribution {
+.maplibregl-map { font-family: inherit; }
+.maplibregl-ctrl-attrib {
   background: rgba(8, 8, 11, .6) !important;
-  color: rgba(255, 255, 255, .35) !important;
-  font-size: 9px !important;
-  padding: 1px 5px !important;
+  color: rgba(255, 255, 255, .38) !important;
+  font-size: 10px !important;
 }
-.leaflet-control-attribution a { color: rgba(255, 255, 255, .5) !important; }
-
-/* Подложка CARTO почти серая, а тёмный Яндекс — синеватый. Серое нельзя
-   покрасить одним hue-rotate: сначала sepia уводит его в тёплый, потом
-   hue-rotate — в синий. Крутить числа здесь, отключается снятием класса. */
-.map-tint .leaflet-tile-pane {
-  filter: sepia(0.45) hue-rotate(174deg) saturate(1.55) brightness(0.92) contrast(1.06);
-}
+.maplibregl-ctrl-attrib a { color: rgba(255, 255, 255, .5) !important; }
+.maplibregl-ctrl-attrib-button { filter: invert(1) opacity(.5); }
 
 .place-pin {
   width: 36px; height: 36px; border-radius: 999px;
@@ -104,6 +97,7 @@ input, textarea { font-size: 16px; }   /* иначе iOS зумит поле п�
   border: 2px solid var(--pin);
   box-shadow: 0 4px 12px rgba(0, 0, 0, .55);
   transition: transform .18s cubic-bezier(.2, .9, .3, 1.4);
+  cursor: pointer;
 }
 .place-pin.is-active { transform: scale(1.22); background: var(--pin); }
 

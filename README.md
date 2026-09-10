@@ -257,3 +257,10 @@ supabase/functions/           две edge-функции
 - Бесплатный проект Supabase засыпает после недели полного простоя и просыпается
   при первом обращении. Расписание pg_cron ходит каждые 5 минут, так что на
   практике он не спит.
+
+### Карта
+
+Векторные тайлы [OpenFreeMap](https://openfreemap.org) — бесплатно, без ключа,
+рисует MapLibre GL. Палитра своя: `public/map-style.json` собирается из тёмного
+стиля OpenFreeMap скриптом `scripts/build-map-style.mjs` — цвета правятся там,
+в объекте `P`, потом `npm run map:style`.
