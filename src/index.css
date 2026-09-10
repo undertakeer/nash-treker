@@ -90,6 +90,13 @@ input, textarea { font-size: 16px; }   /* иначе iOS зумит поле п�
 }
 .leaflet-control-attribution a { color: rgba(255, 255, 255, .5) !important; }
 
+/* Подложка CARTO почти серая, а тёмный Яндекс — синеватый. Серое нельзя
+   покрасить одним hue-rotate: сначала sepia уводит его в тёплый, потом
+   hue-rotate — в синий. Крутить числа здесь, отключается снятием класса. */
+.map-tint .leaflet-tile-pane {
+  filter: sepia(0.45) hue-rotate(174deg) saturate(1.55) brightness(0.92) contrast(1.06);
+}
+
 .place-pin {
   width: 36px; height: 36px; border-radius: 999px;
   display: grid; place-items: center; font-size: 17px;

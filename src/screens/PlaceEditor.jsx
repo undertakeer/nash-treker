@@ -72,8 +72,13 @@ export default function PlaceEditor({ open, place, draft, onClose }) {
       status: form.status,
     };
     try {
-      if (editing) await updatePlace(place.id, payload, file);
-      else await createPlace({ ...payload, lat: point.lat, lng: point.lng }, file);
+      if (editing) {
+        await updatePlace(place.id, payload, file);
+      } else {
+        // не закрываем шторку, если запись не прошла: введённое не потеряется
+        const created = await createPlace({ ...payload, lat: point.lat, lng: point.lng }, file);
+        if (!created) return;
+      }
       onClose();
     } finally {
       setBusy(false);

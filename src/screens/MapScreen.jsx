@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import MapCanvas from "../components/MapCanvas";
 import Avatar from "../components/Avatar";
+import MissingTable from "../components/MissingTable";
 import { Empty, SegmentedControl } from "../components/ui";
 import { useStore } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
@@ -14,7 +15,7 @@ const FILTERS = [
 ];
 
 export default function MapScreen({ onCreateAt, onOpenPlace }) {
-  const { places, profiles, showToast } = useStore();
+  const { places, profiles, showToast, missing } = useStore();
   const [view, setView] = useState("map");
   const [filter, setFilter] = useState("all");
   const [category, setCategory] = useState(null);
@@ -115,6 +116,10 @@ export default function MapScreen({ onCreateAt, onOpenPlace }) {
         </div>
       </header>
 
+      {missing.includes("places") && (
+        <div className="shrink-0"><MissingTable what="Место на карте" /></div>
+      )}
+
       <div className="px-4 shrink-0">
         <SegmentedControl
           value={view}
@@ -163,7 +168,7 @@ export default function MapScreen({ onCreateAt, onOpenPlace }) {
       </div>
 
       {view === "map" ? (
-        <div className="relative flex-1 min-h-0 mx-4 mb-4 rounded-[24px] overflow-hidden border border-white/8">
+        <div className="relative isolate z-0 flex-1 min-h-0 mx-4 mb-4 rounded-[24px] overflow-hidden border border-white/8">
           <MapCanvas
             ref={canvas}
             places={list}
@@ -175,10 +180,10 @@ export default function MapScreen({ onCreateAt, onOpenPlace }) {
 
           {picking && (
             <>
-              <div className="pointer-events-none absolute inset-0 grid place-items-center z-[500]">
+              <div className="pointer-events-none absolute inset-0 grid place-items-center z-[1100]">
                 <div className="text-[30px] -mt-6 drop-shadow-[0_4px_10px_rgba(0,0,0,.8)]">📍</div>
               </div>
-              <div className="absolute left-3 right-3 bottom-3 z-[500] flex gap-2">
+              <div className="absolute left-3 right-3 bottom-3 z-[1100] flex gap-2">
                 <button
                   onClick={() => setPicking(false)}
                   className="press flex-1 py-3 rounded-2xl bg-black/70 backdrop-blur text-[14px] font-bold"
@@ -197,7 +202,7 @@ export default function MapScreen({ onCreateAt, onOpenPlace }) {
           )}
 
           {!picking && (
-            <div className="absolute right-3 bottom-3 z-[500] flex flex-col gap-2">
+            <div className="absolute right-3 bottom-3 z-[1100] flex flex-col gap-2">
               <button
                 onClick={() => locate(true)}
                 className="press w-11 h-11 rounded-full bg-black/70 backdrop-blur border border-white/12 grid place-items-center text-[17px]"

@@ -13,6 +13,9 @@ export const useStore = () => useContext(Ctx);
 
 const ckKey = (habitId, userId, day) => `${habitId}|${userId}|${day}`;
 
+/** 42P01 = undefined_table: миграция не прогнана */
+const NO_TABLE = "Таблица не создана — прогоните supabase/apply.sql в SQL Editor";
+
 /** Баллы за активность */
 export const POINTS_PER_CHECKIN = 10;
 export const POINTS_PER_BADGE = 100;
@@ -42,6 +45,8 @@ export function StoreProvider({ children }) {
   const [tasks, setTasks] = useState(() => readCache("tasks", []));
   const [places, setPlaces] = useState(() => readCache("places", []));
   const [wishlist, setWishlist] = useState(() => readCache("wishlist", []));
+  // таблицы, которых нет в базе: миграция ещё не прогнана
+  const [missing, setMissing] = useState([]);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
   const [queue, setQueue] = useState(() => readCache("queue", []));
@@ -135,6 +140,13 @@ export function StoreProvider({ children }) {
     if (!t.error) setTasks(t.data || []);
     if (!pl.error) setPlaces(pl.data || []);
     if (!wl.error) setWishlist(wl.data || []);
+
+    // 42P01 = undefined_table: понятная подсказка вместо тихой пустоты
+    setMissing(
+      [["tasks", t], ["places", pl], ["wishlist", wl]]
+        .filter(([, res]) => res.error?.code === "42P01")
+        .map(([name]) => name)
+    );
     setLoading(false);
   }, [uid, session]);
 
@@ -432,7 +444,7 @@ export function StoreProvider({ children }) {
       setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, ...patch } : h)));
       const { error } = await supabase.from("habits").update(patch).eq("id", id);
       if (error) {
-        showToast("Не удалось сохранить", "⚠️");
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
         loadAll();
       }
     },
@@ -793,7 +805,7 @@ export function StoreProvider({ children }) {
     async (id, patch) => {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
       const { error } = await supabase.from("tasks").update(patch).eq("id", id);
-      if (error) showToast("Не удалось сохранить", "⚠️");
+      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
     },
     [showToast]
   );
@@ -867,7 +879,7 @@ export function StoreProvider({ children }) {
         .select()
         .single();
       if (error) {
-        showToast("Не удалось сохранить место", "⚠️");
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить место", "⚠️");
         return null;
       }
       setPlaces((prev) => (prev.some((x) => x.id === data.id) ? prev : [data, ...prev]));
@@ -895,7 +907,7 @@ export function StoreProvider({ children }) {
       setPlaces((prev) => prev.map((x) => (x.id === id ? { ...x, ...next } : x)));
       const { error } = await supabase.from("places").update(next).eq("id", id);
       if (error) {
-        showToast("Не удалось сохранить", "⚠️");
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
         return;
       }
       // старый снимок больше не нужен — иначе он навсегда останется в хранилище
@@ -952,7 +964,7 @@ export function StoreProvider({ children }) {
         .select()
         .single();
       if (error) {
-        showToast("Не удалось сохранить", "⚠️");
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
         return null;
       }
       setWishlist((prev) => (prev.some((w) => w.id === data.id) ? prev : [...prev, data]));
@@ -977,7 +989,7 @@ export function StoreProvider({ children }) {
       setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, ...next } : w)));
       const { error } = await supabase.from("wishlist").update(next).eq("id", id);
       if (error) {
-        showToast("Не удалось сохранить", "⚠️");
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
         return;
       }
       if (shot.photo_url && before?.photo_url) dropPhotoFiles(before);
@@ -1019,6 +1031,7 @@ export function StoreProvider({ children }) {
     session, uid, me, partner, profiles,
     habits, checkins, events, achievements, prefs,
     freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeft,
+    missing,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
     toggleCheckin, nudge, react,

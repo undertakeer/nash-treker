@@ -6,9 +6,10 @@ import { Empty, Progress } from "../components/ui";
 import { useStore } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
 import { addDays, todayISO } from "../lib/date";
+import MissingTable from "../components/MissingTable";
 
 export default function Tasks({ onOpenTask, onCreate, onBurst }) {
-  const { tasks, profiles, uid, partner, toggleTask, createTask, clearDoneTasks } = useStore();
+  const { tasks, profiles, uid, partner, toggleTask, createTask, clearDoneTasks, missing } = useStore();
   const today = todayISO();
   const tomorrow = addDays(today, 1);
 
@@ -104,6 +105,8 @@ export default function Tasks({ onOpenTask, onCreate, onBurst }) {
           </button>
         </div>
       </header>
+
+      {missing.includes("tasks") && <MissingTable what="Задача" />}
 
       {todayTotal > 0 && (
         <div className="rounded-2xl bg-white/5 border border-white/8 p-3.5 mb-3">

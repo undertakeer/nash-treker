@@ -81,7 +81,7 @@ const MapCanvas = forwardRef(function MapCanvas(
     }).addTo(m);
   }, [mePos]);
 
-  return <div ref={host} className="absolute inset-0" />;
+  return <div ref={host} className="map-tint absolute inset-0" />;
 });
 
 export default MapCanvas;

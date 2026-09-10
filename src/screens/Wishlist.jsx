@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Sheet from "../components/Sheet";
 import EmojiPicker from "../components/EmojiPicker";
+import MissingTable from "../components/MissingTable";
 import { Button, Empty, Field, SegmentedControl, TextInput } from "../components/ui";
 import { useStore } from "../lib/store";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
@@ -19,7 +20,7 @@ const EMPTY = {
 };
 
 export default function Wishlist({ open, onClose }) {
-  const { uid, partner, wishlist } = useStore();
+  const { uid, partner, wishlist, missing } = useStore();
   const [whose, setWhose] = useState("mine");
   const [editor, setEditor] = useState(null); // { item } | { item: null }
 
@@ -68,6 +69,10 @@ export default function Wishlist({ open, onClose }) {
               Добавить
             </button>
           </div>
+
+          {missing.includes("wishlist") && (
+            <div className="-mx-5"><MissingTable what="Хотелка" /></div>
+          )}
 
           {options.length > 1 && (
             <div className="mb-4">
@@ -222,8 +227,12 @@ function WishEditor({ open, item, ownerId, onClose }) {
       priority: form.priority ? 1 : 0,
     };
     try {
-      if (editing) await updateWishItem(item.id, payload, file);
-      else await createWishItem({ ...payload, owner_id: ownerId || uid }, file);
+      if (editing) {
+        await updateWishItem(item.id, payload, file);
+      } else {
+        const created = await createWishItem({ ...payload, owner_id: ownerId || uid }, file);
+        if (!created) return;
+      }
       onClose();
     } finally {
       setBusy(false);
