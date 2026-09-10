@@ -87,9 +87,10 @@ const MapCanvas = forwardRef(function MapCanvas(
     let start = null;
     const cancel = () => { clearTimeout(timer); timer = null; start = null; };
     const onDown = (e) => {
-      const t = e.touches?.[0];
-      if (!t) return;
-      start = { x: t.clientX, y: t.clientY };
+      // два пальца — это зум, а не установка точки
+      if (e.touches.length !== 1) { cancel(); return; }
+      const t = e.touches[0];
+      start = { x: t.clientX, y: t.clientY, id: t.identifier };
       const box = host.current.getBoundingClientRect();
       const point = [t.clientX - box.left, t.clientY - box.top];
       timer = setTimeout(() => {
@@ -99,8 +100,11 @@ const MapCanvas = forwardRef(function MapCanvas(
       }, LONG_PRESS_MS);
     };
     const onMove = (e) => {
-      const t = e.touches?.[0];
-      if (!t || !start) return;
+      if (!start) return;
+      if (e.touches.length !== 1) { cancel(); return; }
+      // следим именно за тем пальцем, с которого начали
+      const t = [...e.touches].find((x) => x.identifier === start.id);
+      if (!t) { cancel(); return; }
       if (Math.hypot(t.clientX - start.x, t.clientY - start.y) > LONG_PRESS_SLOP) cancel();
     };
     const el = host.current;
@@ -108,6 +112,7 @@ const MapCanvas = forwardRef(function MapCanvas(
     el.addEventListener("touchmove", onMove, { passive: true });
     el.addEventListener("touchend", cancel, { passive: true });
     el.addEventListener("touchcancel", cancel, { passive: true });
+    el.addEventListener("gesturestart", cancel, { passive: true });
     // на компьютере — правая кнопка
     m.on("contextmenu", (e) => cb.current.onLongPress?.({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
 
@@ -118,6 +123,7 @@ const MapCanvas = forwardRef(function MapCanvas(
       el.removeEventListener("touchmove", onMove);
       el.removeEventListener("touchend", cancel);
       el.removeEventListener("touchcancel", cancel);
+      el.removeEventListener("gesturestart", cancel);
       m.remove();
       map.current = null;
       ready.current = false;

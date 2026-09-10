@@ -43,8 +43,8 @@ const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
   args: ["--enable-unsafe-swiftshader", "--hide-scrollbars", "--no-first-run"],
-  // близко к iPhone 13 Pro Max
-  defaultViewport: { width: 428, height: 926, deviceScaleFactor: 2 },
+  // близко к iPhone 13 Pro Max, с касаниями — иначе жесты не проверить
+  defaultViewport: { width: 428, height: 926, deviceScaleFactor: 2, hasTouch: true, isMobile: true },
 });
 
 const page = await browser.newPage();
@@ -123,6 +123,47 @@ const mapState = await page.evaluate(async () => {
 });
 await shot("04-карта");
 
+// Жесты: сведение двумя пальцами не должно открывать редактор точки,
+// а удержание одним — должно.
+const gestures = [];
+if (mapState.ok) {
+  const cdp = await page.createCDPSession();
+  const c = await page.evaluate(() => {
+    const r = document.querySelector("[data-map]").getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  const touch = (type, points) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const editorOpen = () => page.evaluate(() => document.body.textContent.includes("Новое место"));
+  const closeEditor = () => tap("Отмена");
+
+  await touch("touchStart", [{ x: c.x - 40, y: c.y, id: 1 }]);
+  await pause(40);
+  await touch("touchStart", [{ x: c.x - 40, y: c.y, id: 1 }, { x: c.x + 40, y: c.y, id: 2 }]);
+  for (let i = 1; i <= 6; i++) {
+    await pause(120);
+    await touch("touchMove", [
+      { x: c.x - 40 - i * 3, y: c.y, id: 1 },
+      { x: c.x + 40 + i * 3, y: c.y, id: 2 },
+    ]);
+  }
+  await pause(400);
+  await touch("touchEnd", [{ x: c.x - 58, y: c.y, id: 1 }]);
+  await touch("touchEnd", []);
+  await pause(600);
+  if (await editorOpen()) {
+    gestures.push("зум двумя пальцами открыл редактор точки");
+    await closeEditor();
+  }
+
+  await touch("touchStart", [{ x: c.x, y: c.y, id: 1 }]);
+  await pause(900);
+  await touch("touchEnd", []);
+  await pause(700);
+  if (await editorOpen()) await closeEditor();
+  else gestures.push("удержание одним пальцем не открыло редактор точки");
+}
+
 await tap("Мы");
 await shot("05-мы");
 await tap("Профиль");
@@ -133,8 +174,10 @@ if (server) server.kill();
 
 console.log("скриншоты:", shots.join(", "));
 console.log(mapState.ok ? `карта: отрисована ${mapState.w}x${mapState.h}` : `КАРТА НЕ ОТРИСОВАНА: ${mapState.why}`);
+console.log(gestures.length ? "ЖЕСТЫ: " + gestures.join("; ") : "жесты: зум и удержание разведены");
 if (problems.length) {
   console.log("\nЗАМЕЧАНИЯ:");
   for (const p of [...new Set(problems)].slice(0, 20)) console.log(" •", p);
 }
-process.exit(mapState.ok && !problems.some((p) => p.startsWith("ОШИБКА JS")) ? 0 : 1);
+const fatal = !mapState.ok || gestures.length || problems.some((p) => p.startsWith("ОШИБКА JS"));
+process.exit(fatal ? 1 : 0);
