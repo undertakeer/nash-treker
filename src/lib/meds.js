@@ -122,7 +122,7 @@ export function courseProgress(med, iso = todayISO()) {
   return { passed: Math.min(passed, total), total };
 }
 
-/** «через 4 месяца», «через 2 недели» — быстрые сроки для вех */
+/** «через 4 месяца», «через 2 недели» — быстрые сроки для событий */
 export const EVENT_OFFSETS = [
   { label: "через неделю", days: 7 },
   { label: "через 2 недели", days: 14 },

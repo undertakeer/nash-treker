@@ -1129,7 +1129,7 @@ export function StoreProvider({ children }) {
         return null;
       }
       setMedEvents((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-      showToast("Веха добавлена", data.emoji || "🧪");
+      showToast("Событие добавлено", data.emoji || "🧪");
       return data;
     },
     [uid, showToast]

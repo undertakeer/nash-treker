@@ -77,7 +77,7 @@ export default function MedEventEditor({ open, item, onClose }) {
       <div className="px-5 pb-12">
         <div className="flex items-center justify-between py-3">
           <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Отмена</button>
-          <div className="text-[15px] font-bold">{editing ? "Веха" : "Новая веха"}</div>
+          <div className="text-[15px] font-bold">{editing ? "Событие" : "Новое событие"}</div>
           <button
             onClick={save}
             disabled={busy || !form.title.trim()}
@@ -196,12 +196,12 @@ export default function MedEventEditor({ open, item, onClose }) {
           </Field>
 
           <Button onClick={save} disabled={busy || !form.title.trim()} colorKey={color}>
-            {editing ? "Сохранить" : "Добавить веху"}
+            {editing ? "Сохранить" : "Добавить событие"}
           </Button>
 
           {editing && (
             <Button variant="danger" onClick={remove}>
-              {confirmDelete ? "Точно удалить?" : "Удалить веху"}
+              {confirmDelete ? "Точно удалить?" : "Удалить событие"}
             </Button>
           )}
         </div>

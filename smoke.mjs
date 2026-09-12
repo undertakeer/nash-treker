@@ -103,7 +103,7 @@ if (mounted && process.argv[3] === "auth") {
   await click("Лечение");
   await click("Роаккутан");   await click("Отмена");
   await click("Курс");
-  await click("Вехи");
+  await click("События");
   await click("Сдать биохимию"); await click("Отмена");
   await click("Карта");
   // WebGL в jsdom нет, поэтому карта честно уходит в заглушку — проверяем,

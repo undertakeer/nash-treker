@@ -59,7 +59,7 @@ export default function Treatment({ onOpenMed, onCreateMed, onOpenEvent, onCreat
             <button
               onClick={create}
               className="press w-11 h-11 shrink-0 rounded-full bg-white/10 border border-white/10 grid place-items-center text-[22px] font-light leading-none pb-0.5"
-              aria-label={view === "events" ? "Новая веха" : "Новый препарат"}
+              aria-label={view === "events" ? "Новое событие" : "Новый препарат"}
             >
               +
             </button>
@@ -82,7 +82,7 @@ export default function Treatment({ onOpenMed, onCreateMed, onOpenEvent, onCreat
           options={[
             { value: "today", label: "Сегодня", badge: doses.length - takenCount },
             { value: "course", label: "Курс", badge: myMeds.filter((m) => m.status === "active").length },
-            { value: "events", label: "Вехи", badge: soon.length },
+            { value: "events", label: "События", badge: soon.length },
           ]}
         />
       </div>
@@ -374,7 +374,7 @@ function EventsView({ items, today, canCheck, onToggle, onOpen, onCreate }) {
     return (
       <Empty
         emoji="🧪"
-        title="Вех пока нет"
+        title="Событий пока нет"
         subtitle="Сюда складываются анализы, повторные приёмы, закупки — всё, что нужно вспомнить через месяцы."
       />
     );
@@ -441,7 +441,7 @@ function EventsView({ items, today, canCheck, onToggle, onOpen, onCreate }) {
           onClick={onCreate}
           className="press w-full py-3 rounded-2xl bg-white/5 border border-dashed border-white/15 text-[14px] font-semibold text-white/55"
         >
-          ➕ Ещё веха
+          ➕ Ещё событие
         </button>
       )}
     </div>

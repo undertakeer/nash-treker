@@ -197,9 +197,9 @@ for (const [open, name] of [
   await tap("Отмена");
 }
 await tap("Лечение");
-await tap("Вехи");
+await tap("События");
 await tap("+");
-await checkSheetWidth("новая веха");
+await checkSheetWidth("новая событийа");
 await tap("Отмена");
 await tap("Привычки");
 await tap("+");

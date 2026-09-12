@@ -1,5 +1,5 @@
 -- =========================================================
---  Лечение: препараты с расписанием и вехи курса
+--  Лечение: препараты с расписанием и события курса
 --  SQL Editor → New query → вставить → Run. Ничего не удаляет.
 -- =========================================================
 
@@ -40,7 +40,7 @@ create table if not exists public.med_takes (
 
 create index if not exists med_takes_day_idx on public.med_takes (user_id, day);
 
--- вехи курса: анализы, повторная консультация, закупка, «написать врачу»
+-- события курса: анализы, повторная консультация, закупка, «написать врачу»
 create table if not exists public.med_events (
   id          uuid primary key default gen_random_uuid(),
   owner_id    uuid not null references public.profiles(id) on delete cascade,
@@ -81,7 +81,7 @@ create policy "med_events read"  on public.med_events for select to authenticate
 create policy "med_events write" on public.med_events for all to authenticated
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
--- напоминания о приёмах и вехах
+-- напоминания о приёмах и событийах
 alter table public.notification_prefs
   add column if not exists med_reminders boolean not null default true;
 

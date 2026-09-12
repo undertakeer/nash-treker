@@ -37,6 +37,20 @@ body {
 input, textarea, select, button { font-family: inherit; }
 input, textarea { font-size: 16px; }   /* иначе iOS зумит поле при фокусе */
 
+/* Нативные поля даты и времени iOS считает свою ширину по содержимому и
+   игнорируют width: 100% — поле вылезает за край, и шторка начинает
+   ездить по горизонтали. -webkit-min-logical-width снимает этот минимум. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-min-logical-width: 0;
+  box-sizing: border-box;
+}
+
 .safe-top    { padding-top: max(env(safe-area-inset-top), 12px); }
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
 

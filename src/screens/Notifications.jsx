@@ -145,7 +145,7 @@ export default function Notifications({ open, onClose }) {
             value={p.partner_checkins !== false} onChange={(v) => updatePrefs({ partner_checkins: v })} />
           <Toggle label="Задачи со сроком" hint="В указанное для задачи время"
             value={p.task_reminders !== false} onChange={(v) => updatePrefs({ task_reminders: v })} />
-          <Toggle label="Приём препаратов" hint="В каждое время приёма и о вехах курса"
+          <Toggle label="Приём препаратов" hint="В каждое время приёма и о событиях курса"
             value={p.med_reminders !== false} onChange={(v) => updatePrefs({ med_reminders: v })} />
           <Toggle label="Новое место на карте" hint="Когда партнёр отмечает точку"
             value={p.places !== false} onChange={(v) => updatePrefs({ places: v })} />

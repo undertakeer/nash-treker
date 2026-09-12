@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 0б. Вехи курса: анализы, повторный приём, закупка — утром в свой день
+    // 0б. События курса: анализы, повторный приём, закупка — утром в свой день
     if (prefs?.med_reminders !== false && !quiet && Math.abs(minutes - 10 * 60) <= WINDOW) {
       const mine = (medEvents ?? []).filter((e) => e.owner_id === person.id);
       for (const ev of mine) {
