@@ -275,6 +275,13 @@ export default function Profile({ onOpenNotifications, onOpen }) {
           />
           {tabTune && (
             <div className="px-4 pb-4 pt-1">
+              {/* Красная линия по самому низу окна приложения: ниже неё
+                  нам рисовать нечем. Видна только пока идёт подгонка. */}
+              <div
+                aria-hidden
+                className="pointer-events-none fixed inset-x-0 bottom-0 z-[90] h-[3px]"
+                style={{ background: "#FF3B6B" }}
+              />
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setTabGap(tabGap - 2)}
@@ -302,8 +309,8 @@ export default function Profile({ onOpenNotifications, onOpen }) {
               </div>
               <div className="flex items-center justify-between mt-3">
                 <span className="text-[12.5px] text-white/35 leading-relaxed pr-3">
-                  Двигается сразу. До нуля — плашка просто прижимается к низу окна,
-                  подписи целы. Ниже нуля она выходит за край окна, и подписи начнут срезаться.
+                  Внизу экрана — красная линия, это самый низ окна приложения.
+                  Ниже неё рисовать нечем, поэтому ползунок туда не пускает.
                 </span>
                 <button
                   onClick={() => setTabGap(TAB_GAP_DEFAULT)}
