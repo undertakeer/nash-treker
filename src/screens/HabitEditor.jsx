@@ -304,7 +304,7 @@ export default function HabitEditor({ open, onClose, habit }) {
                     set({ goal_days: raw === "" ? null : Math.min(GOAL_MAX, Math.abs(parseInt(raw, 10)) || 0) || null });
                   }}
                   placeholder="например, 45"
-                  className="flex-1"
+                  className="flex-1 min-w-0"
                 />
                 <span className="text-[14px] font-semibold text-white/40 shrink-0">
                   {daysWord(form.goal_days)}

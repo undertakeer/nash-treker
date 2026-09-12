@@ -57,7 +57,8 @@ export default function Sheet({ open, onClose, children, tall = false }) {
                 <div className="w-10 h-1 rounded-full bg-white/22" />
               </div>
               <div
-                className="overflow-y-auto overscroll-contain no-scrollbar"
+                data-sheet
+                className="overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar"
                 style={{
                   maxHeight: `calc(${SHEET_H} - 20px)`,
                   paddingBottom: "env(safe-area-inset-bottom)",

@@ -19,6 +19,9 @@ html, body, #root { height: 100%; }
 html {
   background: var(--color-ink);
   overscroll-behavior: none;
+  /* по горизонтали не двигаемся никогда: если что-то окажется шире экрана,
+     оно обрежется, а не поедет вбок вместе со всей вёрсткой */
+  overflow-x: hidden;
 }
 
 body {
@@ -27,6 +30,7 @@ body {
   color: #fff;
   font-family: var(--font-sans);
   overscroll-behavior: none;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 

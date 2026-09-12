@@ -85,6 +85,23 @@ async function tap(label) {
   return ok;
 }
 
+// Содержимое шторки не должно вылезать по горизонтали: иначе её можно
+// тянуть влево-вправо и вёрстка съезжает.
+async function checkSheetWidth(name) {
+  const bad = await page.evaluate(() => {
+    const box = document.querySelector("[data-sheet]");
+    if (!box) return { missing: true };
+    if (box.scrollWidth <= box.clientWidth + 1) return null;
+    const wide = [...box.querySelectorAll("*")]
+      .filter((el) => el.getBoundingClientRect().right > box.getBoundingClientRect().right + 1)
+      .slice(0, 3)
+      .map((el) => `${el.tagName.toLowerCase()}.${(el.className || "").toString().split(" ")[0]}`);
+    return { over: box.scrollWidth - box.clientWidth, wide };
+  });
+  if (bad?.missing) problems.push(`ШТОРКА НЕ ОТКРЫЛАСЬ, проверка пропущена: ${name}`);
+  else if (bad) problems.push(`ШТОРКА ШИРЕ ЭКРАНА (${name}): на ${bad.over}px, виновники: ${bad.wide.join(", ") || "?"}`);
+}
+
 const shots = [];
 async function shot(name) {
   const file = path.join(OUT, `${name}.png`);
@@ -164,7 +181,40 @@ if (mapState.ok) {
   else gestures.push("удержание одним пальцем не открыло редактор точки");
 }
 
+// редакторы проверяем на самом узком айфоне: переполнение по горизонтали
+// проявляется там первым
+await page.setViewport({ width: 375, height: 812, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+await new Promise((r) => setTimeout(r, 400));
+
+// прощёлкиваем редакторы: у них больше всего полей и сеток
+for (const [open, name] of [
+  ["Лечение", "лечение"],
+  ["Задачи", "задачи"],
+]) {
+  await tap(open);
+  await tap("+");
+  await checkSheetWidth(name === "лечение" ? "новый препарат" : "новая задача");
+  await tap("Отмена");
+}
+await tap("Лечение");
+await tap("Вехи");
+await tap("+");
+await checkSheetWidth("новая веха");
+await tap("Отмена");
+await tap("Привычки");
+await tap("+");
+await checkSheetWidth("новая привычка");
+await tap("Отмена");
+
+await page.setViewport({ width: 428, height: 926, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+await new Promise((r) => setTimeout(r, 400));
+
 await tap("Мы");
+await tap("Вишлист");
+await tap("Добавить");
+await checkSheetWidth("новая хотелка");
+await tap("Отмена");
+await tap("Закрыть");
 await shot("06-мы");
 await tap("Профиль");
 await shot("07-профиль");

@@ -180,7 +180,7 @@ export default function MedEditor({ open, med, onClose }) {
                     type="time"
                     value={hhmm(t)}
                     onChange={(e) => setTime(i, e.target.value)}
-                    className="flex-1 px-4 py-3 rounded-2xl bg-white/6 border border-white/10 outline-none font-semibold"
+                    className="flex-1 min-w-0 px-4 py-3 rounded-2xl bg-white/6 border border-white/10 outline-none font-semibold"
                   />
                   {form.times.length > 1 && (
                     <button
@@ -270,7 +270,7 @@ export default function MedEditor({ open, med, onClose }) {
                   max={60}
                   value={form.every_n_days}
                   onChange={(e) => set({ every_n_days: Math.min(60, Math.max(2, Number(e.target.value) || 2)) })}
-                  className="flex-1"
+                  className="flex-1 min-w-0"
                 />
                 <span className="text-[14px] text-white/45 shrink-0">дней</span>
               </div>
@@ -285,7 +285,7 @@ export default function MedEditor({ open, med, onClose }) {
                   max={31}
                   value={form.day_of_month}
                   onChange={(e) => set({ day_of_month: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })}
-                  className="flex-1"
+                  className="flex-1 min-w-0"
                 />
                 <span className="text-[14px] text-white/45 shrink-0">числа каждого месяца</span>
               </div>

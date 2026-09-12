@@ -304,7 +304,7 @@ function WishEditor({ open, item, ownerId, onClose }) {
                 value={form.price}
                 onChange={(e) => set({ price: e.target.value })}
                 placeholder="1 200 000"
-                className="flex-1"
+                className="flex-1 min-w-0"
               />
               <div className="flex gap-1 shrink-0">
                 {CURRENCIES.map((c) => (
