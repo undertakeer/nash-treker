@@ -233,6 +233,11 @@ await tap("Отмена");
 await page.setViewport({ width: 428, height: 926, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
 await new Promise((r) => setTimeout(r, 400));
 
+await tap("Профиль");
+await tap("Вкладки");
+await checkSheetWidth("вкладки");
+await tap("Закрыть");
+
 await tap("Мы");
 await tap("Вишлист");
 await tap("Добавить");

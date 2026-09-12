@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../components/Avatar";
 import { Button, Card, Empty, Row, Switch } from "../components/ui";
 import MoodPicker from "../components/MoodPicker";
-import ScreenInfo from "../components/ScreenInfo";
-import { ALL_TABS, isLockedTab, visibleTabs } from "../lib/tabs";
+import { ALL_TABS, visibleTabs } from "../lib/tabs";
 import Password from "./Password";
 import EditProfile from "./EditProfile";
+import TabsSettings from "./TabsSettings";
 import { emailToLogin } from "../lib/auth";
 import { useStore, TAB_GAP_DEFAULT, TAB_GAP_MAX, TAB_GAP_MIN } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
@@ -27,16 +27,10 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   } = useStore();
   const [usage, setUsage] = useState(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [screenInfo, setScreenInfo] = useState(false);
   const [tabTune, setTabTune] = useState(false);
+  const [tabsOpen, setTabsOpen] = useState(false);
 
   const shownTabs = visibleTabs(tabs);
-  function toggleTab(id) {
-    const next = shownTabs.includes(id)
-      ? shownTabs.filter((x) => x !== id)
-      : [...shownTabs, id];
-    setTabs(visibleTabs(next));
-  }
   const [editOpen, setEditOpen] = useState(false);
 
   const mine = useMemo(() => checkins.filter((c) => c.user_id === uid), [checkins, uid]);
@@ -242,31 +236,6 @@ export default function Profile({ onOpenNotifications, onOpen }) {
         </Section>
       )}
 
-      <Section title="Вкладки">
-        <Card className="divide-y divide-white/6">
-          <div className="px-4 py-3 text-[12.5px] text-white/35 leading-relaxed">
-            Оставьте только нужные — лишние не будут занимать место в нижнем ряду.
-          </div>
-          {ALL_TABS.map((t) => {
-            const on = shownTabs.includes(t.id);
-            const locked = isLockedTab(t.id);
-            return (
-              <div key={t.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="text-[15px] font-semibold">{t.label}</div>
-                  {locked && <div className="text-[12px] text-white/30">Всегда на месте</div>}
-                </div>
-                {locked ? (
-                  <span className="text-[12px] font-semibold text-white/25">обязательная</span>
-                ) : (
-                  <Switch checked={on} onChange={() => toggleTab(t.id)} />
-                )}
-              </div>
-            );
-          })}
-        </Card>
-      </Section>
-
       <Section title="Настройки">
         <Card className="divide-y divide-white/6">
           <Row
@@ -288,6 +257,13 @@ export default function Profile({ onOpenNotifications, onOpen }) {
             title="Сменить пароль"
             subtitle={`Логин: ${emailToLogin(session?.user?.email)}`}
             onClick={() => setPasswordOpen(true)}
+            right={<span className="text-white/25">›</span>}
+          />
+          <Row
+            icon="🗂"
+            title="Вкладки"
+            subtitle={`${shownTabs.length} из ${ALL_TABS.length} показываются`}
+            onClick={() => setTabsOpen(true)}
             right={<span className="text-white/25">›</span>}
           />
           <Row
@@ -338,14 +314,6 @@ export default function Profile({ onOpenNotifications, onOpen }) {
               </div>
             </div>
           )}
-          <Row
-            icon="📐"
-            title="Размеры экрана"
-            subtitle="Для разбора съезжающих краёв"
-            onClick={() => setScreenInfo((v) => !v)}
-            right={<span className="text-white/25">{screenInfo ? "▲" : "▼"}</span>}
-          />
-          {screenInfo && <ScreenInfo />}
         </Card>
       </Section>
 
@@ -418,6 +386,7 @@ export default function Profile({ onOpenNotifications, onOpen }) {
       </div>
 
       <EditProfile open={editOpen} onClose={() => setEditOpen(false)} />
+      <TabsSettings open={tabsOpen} onClose={() => setTabsOpen(false)} />
       <Password open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </div>
   );
