@@ -48,6 +48,8 @@ export function StoreProvider({ children }) {
   const [meds, setMeds] = useState(() => readCache("meds", []));
   const [medTakes, setMedTakes] = useState(() => readCache("medTakes", []));
   const [medEvents, setMedEvents] = useState(() => readCache("medEvents", []));
+  const [envelopes, setEnvelopes] = useState(() => readCache("envelopes", []));
+  const [finOps, setFinOps] = useState(() => readCache("finOps", []));
   // таблицы, которых нет в базе: миграция ещё не прогнана
   const [missing, setMissing] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -98,11 +100,13 @@ export function StoreProvider({ children }) {
   useEffect(() => writeCache("meds", meds), [meds]);
   useEffect(() => writeCache("medTakes", medTakes), [medTakes]);
   useEffect(() => writeCache("medEvents", medEvents), [medEvents]);
+  useEffect(() => writeCache("envelopes", envelopes), [envelopes]);
+  useEffect(() => writeCache("finOps", finOps), [finOps]);
 
   // ---------- загрузка ----------
   const loadAll = useCallback(async () => {
     if (!uid) return;
-    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl, wl, md, mt, me] = await Promise.all([
+    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl, wl, md, mt, me, fe, fo] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("habits").select("*").order("position").order("created_at"),
       supabase.from("checkins").select("*"),
@@ -119,6 +123,8 @@ export function StoreProvider({ children }) {
       supabase.from("meds").select("*").order("position").order("created_at"),
       supabase.from("med_takes").select("*"),
       supabase.from("med_events").select("*").order("date"),
+      supabase.from("fin_envelopes").select("*").order("position"),
+      supabase.from("fin_ops").select("*").order("day", { ascending: false }),
     ]);
     // при ошибке сети оставляем то, что уже лежит в кэше
     let people = p.error ? null : p.data || [];
@@ -152,10 +158,13 @@ export function StoreProvider({ children }) {
     if (!md.error) setMeds(md.data || []);
     if (!mt.error) setMedTakes(mt.data || []);
     if (!me.error) setMedEvents(me.data || []);
+    if (!fe.error) setEnvelopes(fe.data || []);
+    if (!fo.error) setFinOps(fo.data || []);
 
     // 42P01 = undefined_table: понятная подсказка вместо тихой пустоты
     setMissing(
-      [["tasks", t], ["places", pl], ["wishlist", wl], ["meds", md], ["meds", mt], ["meds", me]]
+      [["tasks", t], ["places", pl], ["wishlist", wl], ["meds", md], ["meds", mt], ["meds", me],
+         ["fin_envelopes", fe], ["fin_envelopes", fo]]
         .filter(([, res]) => res.error?.code === "42P01")
         .map(([name]) => name)
     );
@@ -201,6 +210,8 @@ export function StoreProvider({ children }) {
         else if (table === "wishlist") apply(setWishlist);
         else if (table === "meds") apply(setMeds);
         else if (table === "med_events") apply(setMedEvents);
+        else if (table === "fin_envelopes") apply(setEnvelopes);
+        else if (table === "fin_ops") apply(setFinOps);
         else if (table === "med_takes") {
           setMedTakes((prev) => {
             const key = (x) => `${x.med_id}|${x.user_id}|${x.day}|${String(x.slot).slice(0, 5)}`;
@@ -1166,11 +1177,79 @@ export function StoreProvider({ children }) {
     [showToast]
   );
 
+  // ---------- деньги ----------
+  const createEnvelope = useCallback(
+    async (fields) => {
+      if (!uid) return null;
+      const maxPos = envelopes.reduce((m, x) => Math.max(m, x.position || 0), 0);
+      const { data, error } = await supabase
+        .from("fin_envelopes")
+        .insert({ ...fields, owner_id: uid, position: maxPos + 1 })
+        .select()
+        .single();
+      if (error) {
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        return null;
+      }
+      setEnvelopes((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      return data;
+    },
+    [uid, envelopes, showToast]
+  );
+
+  const updateEnvelope = useCallback(
+    async (id, patch) => {
+      setEnvelopes((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+      const { error } = await supabase.from("fin_envelopes").update(patch).eq("id", id);
+      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+    },
+    [showToast]
+  );
+
+  const deleteEnvelope = useCallback(
+    async (id) => {
+      setEnvelopes((prev) => prev.filter((x) => x.id !== id));
+      // операции не трогаем: они останутся в истории кошелька без конверта
+      setFinOps((prev) => prev.map((o) => (o.envelope_id === id ? { ...o, envelope_id: null } : o)));
+      await supabase.from("fin_envelopes").delete().eq("id", id);
+      showToast("Раздел удалён", "🗑");
+    },
+    [showToast]
+  );
+
+  const addFinOp = useCallback(
+    async (fields) => {
+      if (!uid) return null;
+      const { data, error } = await supabase
+        .from("fin_ops").insert({ ...fields, owner_id: uid }).select().single();
+      if (error) {
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось записать", "⚠️");
+        return null;
+      }
+      setFinOps((prev) => (prev.some((x) => x.id === data.id) ? prev : [data, ...prev]));
+      return data;
+    },
+    [uid, showToast]
+  );
+
+  const deleteFinOp = useCallback(
+    async (id) => {
+      setFinOps((prev) => prev.filter((x) => x.id !== id));
+      await supabase.from("fin_ops").delete().eq("id", id);
+      showToast("Запись удалена", "🗑");
+    },
+    [showToast]
+  );
+
+  // ---------- набор вкладок ----------
+  const tabs = useMemo(() => me?.tabs ?? null, [me]);
+  const setTabs = useCallback((next) => updateProfile({ tabs: next }), [updateProfile]);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
     setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]); setPlaces([]); setWishlist([]);
-    setMeds([]); setMedTakes([]); setMedEvents([]);
+    setMeds([]); setMedTakes([]); setMedEvents([]); setEnvelopes([]); setFinOps([]);
   }, []);
 
   const value = {
@@ -1178,6 +1257,7 @@ export function StoreProvider({ children }) {
     habits, checkins, events, achievements, prefs,
     freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeft,
     meds, medTakes, medEvents, takenKeys,
+    envelopes, finOps, tabs,
     missing,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
@@ -1192,6 +1272,8 @@ export function StoreProvider({ children }) {
     createWishItem, updateWishItem, toggleWishItemGot, deleteWishItem,
     createMed, updateMed, deleteMed, toggleDose,
     createMedEvent, updateMedEvent, toggleMedEvent, deleteMedEvent,
+    createEnvelope, updateEnvelope, deleteEnvelope,
+    addFinOp, deleteFinOp, setTabs,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 

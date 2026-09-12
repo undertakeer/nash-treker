@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../components/Avatar";
-import { Button, Card, Empty, Row } from "../components/ui";
+import { Button, Card, Empty, Row, Switch } from "../components/ui";
 import MoodPicker from "../components/MoodPicker";
 import ScreenInfo from "../components/ScreenInfo";
+import { ALL_TABS, isLockedTab, visibleTabs } from "../lib/tabs";
 import Password from "./Password";
 import EditProfile from "./EditProfile";
 import { emailToLogin } from "../lib/auth";
@@ -22,10 +23,19 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   const {
     me, uid, habits, checkins, achievements, doneSetFor, freezeSetFor,
     updateProfile, signOut, restoreHabit, points, photos, session, loadStorageUsage,
+    tabs, setTabs,
   } = useStore();
   const [usage, setUsage] = useState(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [screenInfo, setScreenInfo] = useState(false);
+
+  const shownTabs = visibleTabs(tabs);
+  function toggleTab(id) {
+    const next = shownTabs.includes(id)
+      ? shownTabs.filter((x) => x !== id)
+      : [...shownTabs, id];
+    setTabs(visibleTabs(next));
+  }
   const [editOpen, setEditOpen] = useState(false);
 
   const mine = useMemo(() => checkins.filter((c) => c.user_id === uid), [checkins, uid]);
@@ -230,6 +240,31 @@ export default function Profile({ onOpenNotifications, onOpen }) {
           </Card>
         </Section>
       )}
+
+      <Section title="Вкладки">
+        <Card className="divide-y divide-white/6">
+          <div className="px-4 py-3 text-[12.5px] text-white/35 leading-relaxed">
+            Оставьте только нужные — лишние не будут занимать место в нижнем ряду.
+          </div>
+          {ALL_TABS.map((t) => {
+            const on = shownTabs.includes(t.id);
+            const locked = isLockedTab(t.id);
+            return (
+              <div key={t.id} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <div className="text-[15px] font-semibold">{t.label}</div>
+                  {locked && <div className="text-[12px] text-white/30">Всегда на месте</div>}
+                </div>
+                {locked ? (
+                  <span className="text-[12px] font-semibold text-white/25">обязательная</span>
+                ) : (
+                  <Switch checked={on} onChange={() => toggleTab(t.id)} />
+                )}
+              </div>
+            );
+          })}
+        </Card>
+      </Section>
 
       <Section title="Настройки">
         <Card className="divide-y divide-white/6">

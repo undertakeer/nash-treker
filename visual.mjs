@@ -133,7 +133,7 @@ async function checkTabBar(where) {
 
 await checkTabBar("привычки");
 await shot("01-привычки");
-for (const [label, name] of [["Сегодня", "02-сегодня"], ["Задачи", "03-задачи"], ["Лечение", "04-лечение"]]) {
+for (const [label, name] of [["Сегодня", "02-сегодня"], ["Задачи", "03-задачи"], ["Лечение", "04-лечение"], ["Деньги", "05-деньги"]]) {
   await tap(label);
   await checkTabBar(name);
   await shot(name);
@@ -162,7 +162,7 @@ const mapState = await page.evaluate(async () => {
   }
   return { ok: false, why: "карта не дошла до состояния ready" };
 });
-await shot("05-карта");
+await shot("06-карта");
 
 // Жесты: сведение двумя пальцами не должно открывать редактор точки,
 // а удержание одним — должно.
@@ -239,9 +239,9 @@ await tap("Добавить");
 await checkSheetWidth("новая хотелка");
 await tap("Отмена");
 await tap("Закрыть");
-await shot("06-мы");
+await shot("07-мы");
 await tap("Профиль");
-await shot("07-профиль");
+await shot("08-профиль");
 
 await browser.close();
 if (server) server.kill();

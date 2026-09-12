@@ -48,6 +48,17 @@ export function IconMeds(p) {
   );
 }
 
+export function IconMoney(p) {
+  return (
+    <svg {...base} {...p}>
+      {/* кошелёк: корпус, линия клапана и застёжка справа */}
+      <rect x="2.9" y="6.3" width="18.2" height="11.4" rx="3.2" />
+      <path d="M2.9 10.1h18.2" />
+      <circle cx="17.2" cy="14" r="1.25" />
+    </svg>
+  );
+}
+
 export function IconMap(p) {
   return (
     <svg {...base} {...p}>

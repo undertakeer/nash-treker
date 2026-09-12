@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { StoreProvider, useStore } from "./lib/store";
+import { visibleTabs } from "./lib/tabs";
 import Auth from "./screens/Auth";
 import Home from "./screens/Home";
 import Today from "./screens/Today";
 import Tasks from "./screens/Tasks";
 import MapScreen from "./screens/MapScreen";
 import Treatment from "./screens/Treatment";
+import Money, { MoneyOps } from "./screens/Money";
 import TaskEditor from "./screens/TaskEditor";
 import PlaceEditor from "./screens/PlaceEditor";
 import MedEditor from "./screens/MedEditor";
@@ -28,7 +30,7 @@ import Confetti from "./components/Confetti";
 import InstallHint from "./components/InstallHint";
 
 function Shell() {
-  const { session, toast, online, pendingCount, places } = useStore();
+  const { session, toast, online, pendingCount, places, tabs } = useStore();
   const [tab, setTab] = useState("home");
   const [openHabit, setOpenHabit] = useState(null);
   const [editor, setEditor] = useState({ open: false, habit: null });
@@ -39,6 +41,7 @@ function Shell() {
   const [openPlace, setOpenPlace] = useState(null);
   const [medEditor, setMedEditor] = useState({ open: false, med: null });
   const [medEventEditor, setMedEventEditor] = useState({ open: false, item: null });
+  const [opsOpen, setOpsOpen] = useState(false);
   const [burst, setBurst] = useState(null);
 
   const fireBurst = useCallback((colorKey) => {
@@ -49,6 +52,13 @@ function Shell() {
   useEffect(() => {
     document.documentElement.style.background = "#08080B";
   }, []);
+
+  const tabIds = useMemo(() => visibleTabs(tabs), [tabs]);
+
+  // вкладку могли только что спрятать в настройках — уводим на первую видимую
+  useEffect(() => {
+    if (!tabIds.includes(tab)) setTab(tabIds[0]);
+  }, [tabIds, tab]);
 
   if (session === undefined) {
     return (
@@ -78,9 +88,9 @@ function Shell() {
         <motion.main
           key={tab}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
         >
           {tab === "home" && (
@@ -107,6 +117,7 @@ function Shell() {
               onBurst={fireBurst}
             />
           )}
+          {tab === "money" && <Money onOpenOps={() => setOpsOpen(true)} />}
           {tab === "map" && (
             <MapScreen
               onCreateAt={(pos) => setPlaceEditor({ open: true, place: null, draft: pos })}
@@ -130,7 +141,7 @@ function Shell() {
       {/* верхняя растушёвка под статус-баром */}
       <div aria-hidden className="edge-fade-top pointer-events-none fixed inset-x-0 top-0 z-20" />
 
-      <TabBar tab={tab} onChange={setTab} />
+      <TabBar tab={tab} onChange={setTab} ids={tabIds} />
       <InstallHint />
 
       {openHabit && (
@@ -183,6 +194,7 @@ function Shell() {
         item={medEventEditor.item}
         onClose={() => setMedEventEditor({ open: false, item: null })}
       />
+      <MoneyOps open={opsOpen} onClose={() => setOpsOpen(false)} />
       <Gallery open={modal === "gallery"} onClose={() => setModal(null)} />
       <Shop open={modal === "shop"} onClose={() => setModal(null)} />
       <Wishlist open={modal === "wishlist"} onClose={() => setModal(null)} />

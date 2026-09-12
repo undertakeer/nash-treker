@@ -1,27 +1,31 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  IconHabits, IconMap, IconMeds, IconProfile, IconTasks, IconToday, IconUs,
+  IconHabits, IconMap, IconMeds, IconMoney, IconProfile, IconTasks, IconToday, IconUs,
 } from "./Icons";
+import { ALL_TABS } from "../lib/tabs";
 
-const TABS = [
-  { id: "home", label: "Привычки", Icon: IconHabits },
-  { id: "today", label: "Сегодня", Icon: IconToday },
-  { id: "tasks", label: "Задачи", Icon: IconTasks },
-  { id: "meds", label: "Лечение", Icon: IconMeds },
-  { id: "map", label: "Карта", Icon: IconMap },
-  { id: "together", label: "Мы", Icon: IconUs },
-  { id: "profile", label: "Профиль", Icon: IconProfile },
-];
+const ICONS = {
+  home: IconHabits,
+  today: IconToday,
+  tasks: IconTasks,
+  meds: IconMeds,
+  money: IconMoney,
+  map: IconMap,
+  together: IconUs,
+  profile: IconProfile,
+};
+
+const LABELS = Object.fromEntries(ALL_TABS.map((t) => [t.id, t.label]));
 
 /** Сколько вкладок помещается в ряд одновременно, остальные — прокруткой */
 const VISIBLE = 4;
 
 /** Вертикальный сдвиг плашки. Отрицательное — опускаем за нижний край экрана
     и возвращаем это место контенту. Высоту в минус CSS не пускает, это её замена.
-    Под плашкой остаётся SAFE_TRIM-вычет плюс SHIFT, сейчас это ~19px: ровно
+    Под плашкой остаётся SAFE_TRIM-вычет плюс SHIFT, сейчас это ~5px: ровно
     столько, чтобы не налезть на домашний индикатор. */
-const SHIFT = -1;
+const SHIFT = -15;
 
 /** Отступ под домашним индикатором: сколько срезаем от системных 34pt */
 const SAFE_TRIM = 14;
@@ -29,7 +33,7 @@ const SAFE_TRIM = 14;
 /** Минимум для телефонов без индикатора, где системный отступ нулевой */
 const SAFE_MIN = 12;
 
-export default function TabBar({ tab, onChange }) {
+export default function TabBar({ tab, onChange, ids }) {
   const scroller = useRef(null);
 
   // активная вкладка сама подъезжает в видимую часть
@@ -60,7 +64,8 @@ export default function TabBar({ tab, onChange }) {
       >
         <div className="rounded-[20px] bg-[#16161C] border border-white/10 p-1">
           <div ref={scroller} className="flex overflow-x-auto no-scrollbar scroll-smooth">
-            {TABS.map(({ id, label, Icon }) => {
+            {ids.map((id) => {
+              const Icon = ICONS[id];
               const active = tab === id;
               return (
                 <button
@@ -69,7 +74,7 @@ export default function TabBar({ tab, onChange }) {
                   onClick={() => onChange(id)}
                   className="relative py-1.5 rounded-[15px] flex flex-col items-center gap-[3px]"
                   style={{
-                    flex: `0 0 ${100 / VISIBLE}%`,
+                    flex: `0 0 ${100 / Math.min(VISIBLE, ids.length)}%`,
                     color: active ? "#fff" : "rgba(255,255,255,.4)",
                   }}
                 >
@@ -81,7 +86,7 @@ export default function TabBar({ tab, onChange }) {
                     />
                   )}
                   <Icon className="relative" />
-                  <span className="relative text-[10.5px] font-semibold whitespace-nowrap">{label}</span>
+                  <span className="relative text-[10.5px] font-semibold whitespace-nowrap">{LABELS[id]}</span>
                 </button>
               );
             })}

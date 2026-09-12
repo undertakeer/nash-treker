@@ -14,7 +14,7 @@ export function authSeed() {
   }));
   const put = (k, v) => set("nt:" + k, JSON.stringify(v));
   put("profiles", [
-    { id: uid, display_name: "Иззат", accent: "mint", emoji: "🙂", mood: "fire", mood_at: new Date().toISOString(), timezone: "Asia/Tashkent", created_at: "2026-01-01T00:00:00Z" },
+    { id: uid, display_name: "Иззат", accent: "mint", emoji: "🙂", mood: "fire", mood_at: new Date().toISOString(), timezone: "Asia/Tashkent", fin_currency: "$", tabs: ["home","today","tasks","meds","money","map","together","profile"], created_at: "2026-01-01T00:00:00Z" },
     { id: pid, display_name: "Лера", accent: "pink", emoji: "🥰", mood: "love", mood_text: "жду вечера", mood_at: new Date().toISOString(), timezone: "Asia/Tashkent", created_at: "2026-01-01T00:00:00Z" },
   ]);
   const today = new Date().toISOString().slice(0, 10);
@@ -55,6 +55,17 @@ export function authSeed() {
   put("medEvents", [
     { id: "ev1", owner_id: uid, title: "Сдать биохимию крови", emoji: "🧪", kind: "analysis", date: plusDays(38), note: "натощак", done: false, remind_days_before: 3, created_at: new Date().toISOString() },
     { id: "ev2", owner_id: uid, title: "Повторная консультация", emoji: "🩺", kind: "consult", date: plusDays(-2), done: false, remind_days_before: 1, created_at: new Date().toISOString() },
+  ]);
+  const thisMonth = today.slice(0, 7);
+  put("envelopes", [
+    { id: "en1", owner_id: uid, title: "Накопления", emoji: "💰", color: "mint", mode: "percent", plan: 30, position: 1, archived: false, created_at: new Date().toISOString() },
+    { id: "en2", owner_id: uid, title: "Девушке", emoji: "💗", color: "pink", mode: "fixed", plan: 126, position: 2, archived: false, created_at: new Date().toISOString() },
+    { id: "en3", owner_id: uid, title: "На жизнь", emoji: "🍔", color: "amber", mode: "fixed", plan: 742, position: 3, archived: false, created_at: new Date().toISOString() },
+  ]);
+  put("finOps", [
+    { id: "fo1", owner_id: uid, envelope_id: null, kind: "income", amount: 1600, note: "зарплата", day: `${thisMonth}-01`, created_at: new Date().toISOString() },
+    { id: "fo2", owner_id: uid, envelope_id: "en3", kind: "expense", amount: 84.5, note: "продукты", day: today, created_at: new Date().toISOString() },
+    { id: "fo3", owner_id: uid, envelope_id: "en2", kind: "expense", amount: 40, note: "цветы", day: today, created_at: new Date().toISOString() },
   ]);
   put("tasks", [
     { id: "t1", title: "Купить корм коту", emoji: "🛒", color: "sky", done: false, due_date: today, due_time: "18:00", assignee_id: null, priority: 1, position: 0, created_at: new Date().toISOString() },
