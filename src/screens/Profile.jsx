@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../components/Avatar";
 import { Button, Card, Empty, Row } from "../components/ui";
 import MoodPicker from "../components/MoodPicker";
+import ScreenInfo from "../components/ScreenInfo";
 import Password from "./Password";
 import EditProfile from "./EditProfile";
 import { emailToLogin } from "../lib/auth";
@@ -24,6 +25,7 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   } = useStore();
   const [usage, setUsage] = useState(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [screenInfo, setScreenInfo] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const mine = useMemo(() => checkins.filter((c) => c.user_id === uid), [checkins, uid]);
@@ -252,6 +254,14 @@ export default function Profile({ onOpenNotifications, onOpen }) {
             onClick={() => setPasswordOpen(true)}
             right={<span className="text-white/25">›</span>}
           />
+          <Row
+            icon="📐"
+            title="Размеры экрана"
+            subtitle="Для разбора съезжающих краёв"
+            onClick={() => setScreenInfo((v) => !v)}
+            right={<span className="text-white/25">{screenInfo ? "▲" : "▼"}</span>}
+          />
+          {screenInfo && <ScreenInfo />}
         </Card>
       </Section>
 

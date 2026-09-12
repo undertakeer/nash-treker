@@ -60,11 +60,12 @@ function Shell() {
 
   if (!session) return <Auth />;
 
-  // Раскладка ровно в высоту экрана: шапка-баннер, прокручиваемая середина,
-  // таб-бар обычным блоком снизу. Раньше таб-бар был position: fixed и на iOS
-  // гулял по вертикали вместе с макетным вьюпортом.
+  // Оболочка прибита к вьюпорту через fixed inset-0, а не через 100dvh:
+  // единицы vh/dvh на iOS расходятся с тем, что считает fixed, и таб-бар
+  // уезжал под край. Прокрутка живёт только внутри main, поэтому документ
+  // не скроллится и панели Safari не пляшут.
   return (
-    <div className="h-[100dvh] flex flex-col max-w-[520px] mx-auto clip-x">
+    <div className="fixed inset-0 flex flex-col max-w-[520px] mx-auto clip-x">
       {(!online || pendingCount > 0) && (
         <div className="relative z-30 shrink-0 text-center text-[12px] font-semibold py-1.5 bg-amber-400/12 text-amber-200/85">
           {online
