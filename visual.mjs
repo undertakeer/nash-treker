@@ -109,9 +109,33 @@ async function shot(name) {
   shots.push(file);
 }
 
+// Таб-бар обязан стоять у нижнего края экрана. Он уже дважды уезжал:
+// сначала из-за position: fixed, потом из-за прокрутки на html.
+async function checkTabBar(where) {
+  const r = await page.evaluate(() => {
+    const nav = document.querySelector("nav");
+    if (!nav) return { missing: true };
+    const b = nav.getBoundingClientRect();
+    const h = document.documentElement;
+    const oy = [getComputedStyle(h).overflowY, getComputedStyle(document.body).overflowY];
+    return {
+      gap: Math.round(window.innerHeight - b.bottom),
+      oy: oy.join("/"),
+      pageScrolls: oy.some((v) => v === "auto" || v === "scroll"),
+    };
+  });
+  if (r.missing) problems.push(`ТАБ-БАР НЕ НАЙДЕН (${where})`);
+  else if (r.gap > 2) problems.push(`ТАБ-БАР НЕ У НИЗА (${where}): ${r.gap}px до края`);
+  // Сама страница прокручиваться не должна: прокрутка живёт внутри main.
+  // Иначе на iOS, где 100dvh больше height: 100%, таб-бар уедет под край.
+  if (r.pageScrolls) problems.push(`СТРАНИЦА ПРОКРУЧИВАЕТСЯ (${where}): html/body overflow-y = ${r.oy}`);
+}
+
+await checkTabBar("привычки");
 await shot("01-привычки");
 for (const [label, name] of [["Сегодня", "02-сегодня"], ["Задачи", "03-задачи"], ["Лечение", "04-лечение"]]) {
   await tap(label);
+  await checkTabBar(name);
   await shot(name);
 }
 

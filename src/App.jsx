@@ -64,7 +64,7 @@ function Shell() {
   // таб-бар обычным блоком снизу. Раньше таб-бар был position: fixed и на iOS
   // гулял по вертикали вместе с макетным вьюпортом.
   return (
-    <div className="h-[100dvh] flex flex-col max-w-[520px] mx-auto">
+    <div className="h-[100dvh] flex flex-col max-w-[520px] mx-auto clip-x">
       {(!online || pendingCount > 0) && (
         <div className="relative z-30 shrink-0 text-center text-[12px] font-semibold py-1.5 bg-amber-400/12 text-amber-200/85">
           {online
@@ -76,7 +76,7 @@ function Shell() {
       <AnimatePresence mode="wait">
         <motion.main
           key={tab}
-          className="flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
