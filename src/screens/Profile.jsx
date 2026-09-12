@@ -7,7 +7,7 @@ import { ALL_TABS, isLockedTab, visibleTabs } from "../lib/tabs";
 import Password from "./Password";
 import EditProfile from "./EditProfile";
 import { emailToLogin } from "../lib/auth";
-import { useStore } from "../lib/store";
+import { useStore, TAB_GAP_DEFAULT, TAB_GAP_MAX, TAB_GAP_MIN } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
 import { addDays, days, humanDateFull, isoWeekday, todayISO } from "../lib/date";
 import { bestStreak, streak } from "../lib/stats";
@@ -23,11 +23,12 @@ export default function Profile({ onOpenNotifications, onOpen }) {
   const {
     me, uid, habits, checkins, achievements, doneSetFor, freezeSetFor,
     updateProfile, signOut, restoreHabit, points, photos, session, loadStorageUsage,
-    tabs, setTabs,
+    tabs, setTabs, tabGap, setTabGap,
   } = useStore();
   const [usage, setUsage] = useState(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [screenInfo, setScreenInfo] = useState(false);
+  const [tabTune, setTabTune] = useState(false);
 
   const shownTabs = visibleTabs(tabs);
   function toggleTab(id) {
@@ -289,6 +290,54 @@ export default function Profile({ onOpenNotifications, onOpen }) {
             onClick={() => setPasswordOpen(true)}
             right={<span className="text-white/25">›</span>}
           />
+          <Row
+            icon="📱"
+            title="Положение нижнего меню"
+            subtitle={`Зазор под меню ${tabGap} px`}
+            onClick={() => setTabTune((v) => !v)}
+            right={<span className="text-white/25">{tabTune ? "▲" : "▼"}</span>}
+          />
+          {tabTune && (
+            <div className="px-4 pb-4 pt-1">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setTabGap(tabGap - 2)}
+                  className="press w-10 h-10 shrink-0 rounded-xl bg-white/8 grid place-items-center text-[18px]"
+                  aria-label="Ниже"
+                >
+                  ↓
+                </button>
+                <input
+                  type="range"
+                  min={TAB_GAP_MIN}
+                  max={TAB_GAP_MAX}
+                  step={1}
+                  value={tabGap}
+                  onChange={(e) => setTabGap(Number(e.target.value))}
+                  className="flex-1 min-w-0 accent-white"
+                />
+                <button
+                  onClick={() => setTabGap(tabGap + 2)}
+                  className="press w-10 h-10 shrink-0 rounded-xl bg-white/8 grid place-items-center text-[18px]"
+                  aria-label="Выше"
+                >
+                  ↑
+                </button>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-[12.5px] text-white/35 leading-relaxed pr-3">
+                  Двигается сразу. До нуля — плашка просто прижимается к низу окна,
+                  подписи целы. Ниже нуля она выходит за край окна, и подписи начнут срезаться.
+                </span>
+                <button
+                  onClick={() => setTabGap(TAB_GAP_DEFAULT)}
+                  className="press shrink-0 px-3 py-1.5 rounded-lg bg-white/8 text-[12.5px] font-semibold text-white/60"
+                >
+                  Сбросить
+                </button>
+              </div>
+            </div>
+          )}
           <Row
             icon="📐"
             title="Размеры экрана"

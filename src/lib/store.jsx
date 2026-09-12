@@ -16,6 +16,13 @@ const ckKey = (habitId, userId, day) => `${habitId}|${userId}|${day}`;
 /** 42P01 = undefined_table: миграция не прогнана */
 const NO_TABLE = "Таблица не создана — прогоните supabase/apply.sql в SQL Editor";
 
+/** Отступ между плашкой меню и низом окна, в пикселях.
+    Положительный — обычный отступ, подписи целы. Отрицательный выдавливает
+    плашку за край окна: она опускается, но подписи начинают срезаться. */
+export const TAB_GAP_DEFAULT = 12;
+export const TAB_GAP_MIN = -24;
+export const TAB_GAP_MAX = 44;
+
 /** Баллы за активность */
 export const POINTS_PER_CHECKIN = 10;
 export const POINTS_PER_BADGE = 100;
@@ -50,6 +57,8 @@ export function StoreProvider({ children }) {
   const [medEvents, setMedEvents] = useState(() => readCache("medEvents", []));
   const [envelopes, setEnvelopes] = useState(() => readCache("envelopes", []));
   const [finOps, setFinOps] = useState(() => readCache("finOps", []));
+  // положение нижнего меню: у каждого телефона свой вырез, подгоняется руками
+  const [tabGap, setTabGapState] = useState(() => readCache("tabGap", TAB_GAP_DEFAULT));
   // таблицы, которых нет в базе: миграция ещё не прогнана
   const [missing, setMissing] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1242,6 +1251,12 @@ export function StoreProvider({ children }) {
   );
 
   // ---------- набор вкладок ----------
+  const setTabGap = useCallback((v) => {
+    const clamped = Math.max(TAB_GAP_MIN, Math.min(TAB_GAP_MAX, Math.round(v)));
+    setTabGapState(clamped);
+    writeCache("tabGap", clamped);
+  }, []);
+
   const tabs = useMemo(() => me?.tabs ?? null, [me]);
   const setTabs = useCallback((next) => updateProfile({ tabs: next }), [updateProfile]);
 
@@ -1257,7 +1272,7 @@ export function StoreProvider({ children }) {
     habits, checkins, events, achievements, prefs,
     freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeft,
     meds, medTakes, medEvents, takenKeys,
-    envelopes, finOps, tabs,
+    envelopes, finOps, tabs, tabGap,
     missing,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
@@ -1273,7 +1288,7 @@ export function StoreProvider({ children }) {
     createMed, updateMed, deleteMed, toggleDose,
     createMedEvent, updateMedEvent, toggleMedEvent, deleteMedEvent,
     createEnvelope, updateEnvelope, deleteEnvelope,
-    addFinOp, deleteFinOp, setTabs,
+    addFinOp, deleteFinOp, setTabs, setTabGap,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 
