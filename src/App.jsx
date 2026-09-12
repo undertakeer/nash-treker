@@ -65,7 +65,7 @@ function Shell() {
   // уезжал под край. Прокрутка живёт только внутри main, поэтому документ
   // не скроллится и панели Safari не пляшут.
   return (
-    <div className="fixed inset-0 flex flex-col max-w-[520px] mx-auto clip-x">
+    <div className="fixed inset-0 flex flex-col max-w-[520px] mx-auto overflow-hidden">
       {(!online || pendingCount > 0) && (
         <div className="relative z-30 shrink-0 text-center text-[12px] font-semibold py-1.5 bg-amber-400/12 text-amber-200/85">
           {online

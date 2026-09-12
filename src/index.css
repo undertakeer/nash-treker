@@ -83,11 +83,9 @@ input[type="datetime-local"] {
   background: linear-gradient(to top, var(--color-ink) 46%, rgba(8, 8, 11, 0));
 }
 
-/* Горизонтальную прокрутку закрываем только внутри приложения. На html и
-   body этого делать нельзя: по стандарту overflow-x: hidden превращает
-   overflow-y в auto, страница становится прокручиваемой, и на iOS, где
-   100dvh больше height: 100%, таб-бар уезжает под нижний край. */
-.clip-x { overflow-x: hidden; }
+/* Нигде не задаём overflow только по одной оси: по стандарту вторая при
+   этом становится auto, и контейнер неожиданно начинает прокручиваться.
+   Именно так у оболочки один раз уехал таб-бар. */
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
