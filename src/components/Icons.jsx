@@ -37,6 +37,17 @@ export function IconTasks(p) {
   );
 }
 
+export function IconMeds(p) {
+  return (
+    <svg {...base} {...p}>
+      {/* капсула под углом; перехват идёт поперёк её длинной оси */}
+      <rect x="3.2" y="8.6" width="17.6" height="6.8" rx="3.4"
+            transform="rotate(-42 12 12)" />
+      <path d="M9.6 9.6l4.8 4.8" />
+    </svg>
+  );
+}
+
 export function IconMap(p) {
   return (
     <svg {...base} {...p}>

@@ -1,13 +1,14 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  IconHabits, IconMap, IconProfile, IconTasks, IconToday, IconUs,
+  IconHabits, IconMap, IconMeds, IconProfile, IconTasks, IconToday, IconUs,
 } from "./Icons";
 
 const TABS = [
   { id: "home", label: "Привычки", Icon: IconHabits },
   { id: "today", label: "Сегодня", Icon: IconToday },
   { id: "tasks", label: "Задачи", Icon: IconTasks },
+  { id: "meds", label: "Лечение", Icon: IconMeds },
   { id: "map", label: "Карта", Icon: IconMap },
   { id: "together", label: "Мы", Icon: IconUs },
   { id: "profile", label: "Профиль", Icon: IconProfile },

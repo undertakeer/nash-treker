@@ -45,6 +45,9 @@ export function StoreProvider({ children }) {
   const [tasks, setTasks] = useState(() => readCache("tasks", []));
   const [places, setPlaces] = useState(() => readCache("places", []));
   const [wishlist, setWishlist] = useState(() => readCache("wishlist", []));
+  const [meds, setMeds] = useState(() => readCache("meds", []));
+  const [medTakes, setMedTakes] = useState(() => readCache("medTakes", []));
+  const [medEvents, setMedEvents] = useState(() => readCache("medEvents", []));
   // таблицы, которых нет в базе: миграция ещё не прогнана
   const [missing, setMissing] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -92,11 +95,14 @@ export function StoreProvider({ children }) {
   useEffect(() => writeCache("tasks", tasks), [tasks]);
   useEffect(() => writeCache("places", places), [places]);
   useEffect(() => writeCache("wishlist", wishlist), [wishlist]);
+  useEffect(() => writeCache("meds", meds), [meds]);
+  useEffect(() => writeCache("medTakes", medTakes), [medTakes]);
+  useEffect(() => writeCache("medEvents", medEvents), [medEvents]);
 
   // ---------- загрузка ----------
   const loadAll = useCallback(async () => {
     if (!uid) return;
-    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl, wl] = await Promise.all([
+    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl, wl, md, mt, me] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("habits").select("*").order("position").order("created_at"),
       supabase.from("checkins").select("*"),
@@ -110,6 +116,9 @@ export function StoreProvider({ children }) {
       supabase.from("tasks").select("*").order("position").order("created_at"),
       supabase.from("places").select("*").order("created_at", { ascending: false }),
       supabase.from("wishlist").select("*").order("position").order("created_at"),
+      supabase.from("meds").select("*").order("position").order("created_at"),
+      supabase.from("med_takes").select("*"),
+      supabase.from("med_events").select("*").order("date"),
     ]);
     // при ошибке сети оставляем то, что уже лежит в кэше
     let people = p.error ? null : p.data || [];
@@ -140,10 +149,13 @@ export function StoreProvider({ children }) {
     if (!t.error) setTasks(t.data || []);
     if (!pl.error) setPlaces(pl.data || []);
     if (!wl.error) setWishlist(wl.data || []);
+    if (!md.error) setMeds(md.data || []);
+    if (!mt.error) setMedTakes(mt.data || []);
+    if (!me.error) setMedEvents(me.data || []);
 
     // 42P01 = undefined_table: понятная подсказка вместо тихой пустоты
     setMissing(
-      [["tasks", t], ["places", pl], ["wishlist", wl]]
+      [["tasks", t], ["places", pl], ["wishlist", wl], ["meds", md], ["meds", mt], ["meds", me]]
         .filter(([, res]) => res.error?.code === "42P01")
         .map(([name]) => name)
     );
@@ -187,6 +199,15 @@ export function StoreProvider({ children }) {
         else if (table === "tasks") apply(setTasks);
         else if (table === "places") apply(setPlaces);
         else if (table === "wishlist") apply(setWishlist);
+        else if (table === "meds") apply(setMeds);
+        else if (table === "med_events") apply(setMedEvents);
+        else if (table === "med_takes") {
+          setMedTakes((prev) => {
+            const key = (x) => `${x.med_id}|${x.user_id}|${x.day}|${String(x.slot).slice(0, 5)}`;
+            if (eventType === "DELETE") return prev.filter((x) => key(x) !== key(old));
+            return prev.some((x) => key(x) === key(row)) ? prev : [...prev, row];
+          });
+        }
         else if (table === "profiles") apply(setProfiles);
         else if (table === "achievements") apply(setAchievements);
         else if (table === "events") {
@@ -1021,16 +1042,142 @@ export function StoreProvider({ children }) {
     [wishlist, dropPhotoFiles, showToast]
   );
 
+  // ---------- лечение ----------
+  /** Быстрая проверка «этот приём отмечен»: med_id|day|slot */
+  const takenKeys = useMemo(
+    () => new Set(medTakes.map((t) => `${t.med_id}|${t.day}|${String(t.slot).slice(0, 5)}`)),
+    [medTakes]
+  );
+
+  const createMed = useCallback(
+    async (fields) => {
+      if (!uid) return null;
+      const maxPos = meds.reduce((m, x) => Math.max(m, x.position || 0), 0);
+      const { data, error } = await supabase
+        .from("meds")
+        .insert({ ...fields, owner_id: uid, position: maxPos + 1 })
+        .select()
+        .single();
+      if (error) {
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        return null;
+      }
+      setMeds((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      showToast("Добавлено в лечение", data.emoji || "💊");
+      return data;
+    },
+    [uid, meds, showToast]
+  );
+
+  const updateMed = useCallback(
+    async (id, patch) => {
+      setMeds((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+      const { error } = await supabase.from("meds").update(patch).eq("id", id);
+      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+    },
+    [showToast]
+  );
+
+  const deleteMed = useCallback(
+    async (id) => {
+      setMeds((prev) => prev.filter((x) => x.id !== id));
+      setMedTakes((prev) => prev.filter((t) => t.med_id !== id));
+      await supabase.from("meds").delete().eq("id", id);
+      showToast("Удалено", "🗑");
+    },
+    [showToast]
+  );
+
+  /** Отметить или снять конкретный приём */
+  const toggleDose = useCallback(
+    async (med, day, slot) => {
+      if (!uid) return;
+      const time = String(slot).slice(0, 5);
+      const has = takenKeys.has(`${med.id}|${day}|${time}`);
+      const same = (t) =>
+        t.med_id === med.id && t.user_id === uid && t.day === day && String(t.slot).slice(0, 5) === time;
+
+      if (has) {
+        setMedTakes((prev) => prev.filter((t) => !same(t)));
+        await supabase.from("med_takes").delete()
+          .match({ med_id: med.id, user_id: uid, day, slot: time });
+        return false;
+      }
+      setMedTakes((prev) => [...prev, {
+        med_id: med.id, user_id: uid, day, slot: time, taken_at: new Date().toISOString(),
+      }]);
+      const { error } = await supabase.from("med_takes")
+        .upsert({ med_id: med.id, user_id: uid, day, slot: time },
+                { onConflict: "med_id,user_id,day,slot", ignoreDuplicates: true });
+      if (error) {
+        setMedTakes((prev) => prev.filter((t) => !same(t)));
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось отметить", "⚠️");
+        return false;
+      }
+      return true;
+    },
+    [uid, takenKeys, showToast]
+  );
+
+  const createMedEvent = useCallback(
+    async (fields) => {
+      if (!uid) return null;
+      const { data, error } = await supabase
+        .from("med_events").insert({ ...fields, owner_id: uid }).select().single();
+      if (error) {
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        return null;
+      }
+      setMedEvents((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      showToast("Веха добавлена", data.emoji || "🧪");
+      return data;
+    },
+    [uid, showToast]
+  );
+
+  const updateMedEvent = useCallback(
+    async (id, patch) => {
+      setMedEvents((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+      const { error } = await supabase.from("med_events").update(patch).eq("id", id);
+      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+    },
+    [showToast]
+  );
+
+  const toggleMedEvent = useCallback(
+    async (item) => {
+      const patch = item.done
+        ? { done: false, done_at: null }
+        : { done: true, done_at: new Date().toISOString() };
+      setMedEvents((prev) => prev.map((x) => (x.id === item.id ? { ...x, ...patch } : x)));
+      await supabase.from("med_events").update(patch).eq("id", item.id);
+      if (!patch.done) return;
+      showToast("Готово", "✅");
+    },
+    [showToast]
+  );
+
+  const deleteMedEvent = useCallback(
+    async (id) => {
+      setMedEvents((prev) => prev.filter((x) => x.id !== id));
+      await supabase.from("med_events").delete().eq("id", id);
+      showToast("Удалено", "🗑");
+    },
+    [showToast]
+  );
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
     setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]); setPlaces([]); setWishlist([]);
+    setMeds([]); setMedTakes([]); setMedEvents([]);
   }, []);
 
   const value = {
     session, uid, me, partner, profiles,
     habits, checkins, events, achievements, prefs,
     freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeft,
+    meds, medTakes, medEvents, takenKeys,
     missing,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
@@ -1043,6 +1190,8 @@ export function StoreProvider({ children }) {
     createTask, updateTask, toggleTask, deleteTask, clearDoneTasks,
     createPlace, updatePlace, togglePlaceVisited, deletePlace, attachPlacePhoto,
     createWishItem, updateWishItem, toggleWishItemGot, deleteWishItem,
+    createMed, updateMed, deleteMed, toggleDose,
+    createMedEvent, updateMedEvent, toggleMedEvent, deleteMedEvent,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 

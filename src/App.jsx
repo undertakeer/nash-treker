@@ -6,8 +6,11 @@ import Home from "./screens/Home";
 import Today from "./screens/Today";
 import Tasks from "./screens/Tasks";
 import MapScreen from "./screens/MapScreen";
+import Treatment from "./screens/Treatment";
 import TaskEditor from "./screens/TaskEditor";
 import PlaceEditor from "./screens/PlaceEditor";
+import MedEditor from "./screens/MedEditor";
+import MedEventEditor from "./screens/MedEventEditor";
 import PlaceDetail from "./screens/PlaceDetail";
 import Together from "./screens/Together";
 import Gallery from "./screens/Gallery";
@@ -34,6 +37,8 @@ function Shell() {
   const [taskEditor, setTaskEditor] = useState({ open: false, task: null });
   const [placeEditor, setPlaceEditor] = useState({ open: false, place: null, draft: null });
   const [openPlace, setOpenPlace] = useState(null);
+  const [medEditor, setMedEditor] = useState({ open: false, med: null });
+  const [medEventEditor, setMedEventEditor] = useState({ open: false, item: null });
   const [burst, setBurst] = useState(null);
 
   const fireBurst = useCallback((colorKey) => {
@@ -89,6 +94,15 @@ function Shell() {
             <Tasks
               onOpenTask={(t) => setTaskEditor({ open: true, task: t })}
               onCreate={() => setTaskEditor({ open: true, task: null })}
+              onBurst={fireBurst}
+            />
+          )}
+          {tab === "meds" && (
+            <Treatment
+              onOpenMed={(m) => setMedEditor({ open: true, med: m })}
+              onCreateMed={() => setMedEditor({ open: true, med: null })}
+              onOpenEvent={(e) => setMedEventEditor({ open: true, item: e })}
+              onCreateEvent={() => setMedEventEditor({ open: true, item: null })}
               onBurst={fireBurst}
             />
           )}
@@ -156,6 +170,17 @@ function Shell() {
         place={placeEditor.place}
         draft={placeEditor.draft}
         onClose={() => setPlaceEditor({ open: false, place: null, draft: null })}
+      />
+
+      <MedEditor
+        open={medEditor.open}
+        med={medEditor.med}
+        onClose={() => setMedEditor({ open: false, med: null })}
+      />
+      <MedEventEditor
+        open={medEventEditor.open}
+        item={medEventEditor.item}
+        onClose={() => setMedEventEditor({ open: false, item: null })}
       />
       <Gallery open={modal === "gallery"} onClose={() => setModal(null)} />
       <Shop open={modal === "shop"} onClose={() => setModal(null)} />

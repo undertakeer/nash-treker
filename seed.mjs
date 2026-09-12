@@ -43,6 +43,19 @@ export function authSeed() {
     { id: "wl1", owner_id: uid, title: "Кроссовки New Balance 530", emoji: "👟", color: "violet", price: 1200000, currency: "сум", url: "https://asaxiy.uz/product/nb530", note: "размер 42, серые", priority: 1, status: "want", position: 1, created_by: uid, created_at: new Date().toISOString() },
     { id: "wl2", owner_id: pid, title: "Наушники", emoji: "🎧", color: "pink", price: 90, currency: "$", status: "want", position: 2, created_by: pid, created_at: new Date().toISOString() },
   ]);
+  const plusDays = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  put("meds", [
+    { id: "m1", owner_id: uid, title: "Роаккутан", emoji: "💊", color: "teal", dose: "1 капсула 20 мг после еды", schedule_type: "daily", target_per_week: 7, weekdays: [1,2,3,4,5,6,7], every_n_days: 2, times: ["09:00", "21:00"], start_date: plusDays(-20), end_date: plusDays(100), reminder: true, status: "active", position: 1, created_at: new Date().toISOString() },
+    { id: "m2", owner_id: uid, title: "Дифферин", emoji: "🧴", color: "violet", dose: "тонким слоем на ночь", schedule_type: "times_per_week", target_per_week: 4, weekdays: [1,2,3,4,5,6,7], every_n_days: 2, times: ["22:30"], start_date: plusDays(-10), end_date: null, reminder: true, status: "active", position: 2, created_at: new Date().toISOString() },
+    { id: "m3", owner_id: uid, title: "Закупка на месяц", emoji: "🛒", color: "amber", schedule_type: "monthly", target_per_week: 7, weekdays: [1,2,3,4,5,6,7], every_n_days: 2, day_of_month: 5, times: ["12:00"], start_date: plusDays(-20), end_date: null, reminder: true, status: "active", position: 3, created_at: new Date().toISOString() },
+  ]);
+  put("medTakes", [
+    { med_id: "m1", user_id: uid, day: today, slot: "09:00", taken_at: new Date().toISOString() },
+  ]);
+  put("medEvents", [
+    { id: "ev1", owner_id: uid, title: "Сдать биохимию крови", emoji: "🧪", kind: "analysis", date: plusDays(38), note: "натощак", done: false, remind_days_before: 3, created_at: new Date().toISOString() },
+    { id: "ev2", owner_id: uid, title: "Повторная консультация", emoji: "🩺", kind: "consult", date: plusDays(-2), done: false, remind_days_before: 1, created_at: new Date().toISOString() },
+  ]);
   put("tasks", [
     { id: "t1", title: "Купить корм коту", emoji: "🛒", color: "sky", done: false, due_date: today, due_time: "18:00", assignee_id: null, priority: 1, position: 0, created_at: new Date().toISOString() },
     { id: "t2", title: "Записаться к врачу", emoji: "🏥", color: "rose", done: false, due_date: null, assignee_id: uid, priority: 0, position: 1, created_at: new Date().toISOString() },

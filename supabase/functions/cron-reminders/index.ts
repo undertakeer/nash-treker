@@ -6,6 +6,43 @@ import {
 
 const WINDOW = 7; // минут: попадание во временное окно вокруг заданного часа
 
+const dayMs = 86400000;
+const parseISO = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+const daysBetween = (a: string, b: string) => Math.round((parseISO(b) - parseISO(a)) / dayMs);
+const shiftISO = (iso: string, days: number) =>
+  new Date(parseISO(iso) + days * dayMs).toISOString().slice(0, 10);
+
+/** Нужно ли принимать препарат в этот день — та же логика, что на клиенте */
+function medDueToday(med: Record<string, unknown>, date: string, isoWeekday: number) {
+  const start = med.start_date as string | null;
+  const end = med.end_date as string | null;
+  if (start && date < start) return false;
+  if (end && date > end) return false;
+
+  switch (med.schedule_type) {
+    case "daily":
+    case "times_per_week":
+      return true;
+    case "weekdays":
+      return ((med.weekdays as number[]) ?? []).includes(isoWeekday);
+    case "every_n_days": {
+      const step = Math.max(2, (med.every_n_days as number) ?? 2);
+      const passed = daysBetween(start ?? date, date);
+      return passed >= 0 && passed % step === 0;
+    }
+    case "monthly": {
+      const [y, m, d] = date.split("-").map(Number);
+      const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      return d === Math.min((med.day_of_month as number) ?? 1, last);
+    }
+    default:
+      return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -16,12 +53,15 @@ Deno.serve(async (req) => {
 
   const admin = adminClient();
 
-  const [{ data: profiles }, { data: habits }, { data: prefsRows }, { data: tasks }] =
+  const [{ data: profiles }, { data: habits }, { data: prefsRows }, { data: tasks },
+         { data: meds }, { data: medEvents }] =
     await Promise.all([
       admin.from("profiles").select("*"),
       admin.from("habits").select("*").eq("status", "active"),
       admin.from("notification_prefs").select("*"),
       admin.from("tasks").select("*").eq("done", false).not("due_time", "is", null),
+      admin.from("meds").select("*").eq("status", "active"),
+      admin.from("med_events").select("*").eq("done", false),
     ]);
 
   const prefsOf = (id: string) => prefsRows?.find((p) => p.user_id === id);
@@ -31,6 +71,49 @@ Deno.serve(async (req) => {
     const prefs = prefsOf(person.id);
     const { minutes, date, isoWeekday } = localParts(person.timezone || "UTC");
     const quiet = inQuietHours(minutes, prefs?.quiet_from, prefs?.quiet_to);
+
+    // 0. Приём препаратов: у каждого времени свой пуш
+    if (prefs?.med_reminders !== false && !quiet) {
+      const mine = (meds ?? []).filter((m) => m.owner_id === person.id && m.reminder !== false);
+      if (mine.length) {
+        const { data: takes } = await admin
+          .from("med_takes").select("med_id, slot").eq("user_id", person.id).eq("day", date);
+        const taken = new Set((takes ?? []).map((t) => `${t.med_id}|${String(t.slot).slice(0, 5)}`));
+
+        for (const med of mine) {
+          if (!medDueToday(med, date, isoWeekday)) continue;
+          for (const raw of (med.times as string[]) ?? ["09:00"]) {
+            const slot = String(raw).slice(0, 5);
+            if (taken.has(`${med.id}|${slot}`)) continue;
+            if (Math.abs(minutes - hhmmToMinutes(slot, 9 * 60)) > WINDOW) continue;
+            if (!(await claim(admin, person.id, "med", `${med.id}:${date}:${slot}`))) continue;
+
+            sent += await sendToUser(admin, person.id, {
+              title: `${med.emoji} ${med.title}`,
+              body: med.dose ? `${slot} — ${med.dose}` : `Пора принять, ${slot}`,
+              tag: `med-${med.id}-${slot}`,
+            });
+          }
+        }
+      }
+    }
+
+    // 0б. Вехи курса: анализы, повторный приём, закупка — утром в свой день
+    if (prefs?.med_reminders !== false && !quiet && Math.abs(minutes - 10 * 60) <= WINDOW) {
+      const mine = (medEvents ?? []).filter((e) => e.owner_id === person.id);
+      for (const ev of mine) {
+        const remindOn = shiftISO(ev.date, -(ev.remind_days_before ?? 1));
+        if (remindOn !== date) continue;
+        if (!(await claim(admin, person.id, "med_event", `${ev.id}:${date}`))) continue;
+
+        const when = ev.date === date ? "сегодня" : `${daysBetween(date, ev.date)} дн.`;
+        sent += await sendToUser(admin, person.id, {
+          title: `${ev.emoji} ${ev.title}`,
+          body: ev.note ? `${when} · ${ev.note}` : when,
+          tag: `med-event-${ev.id}`,
+        });
+      }
+    }
 
     const own = (habits ?? []).filter((h) => h.kind === "shared" || h.owner_id === person.id);
     if (!own.length) continue;

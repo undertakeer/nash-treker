@@ -9,10 +9,11 @@
     "preview": "vite preview",
     "smoke": "vite build && node ./smoke.mjs dist && node ./smoke.mjs dist auth",
     "lint": "eslint src",
-    "check": "npm run lint && npm run smoke && npm run bundle:functions",
+    "check": "npm run lint && npm run units && npm run smoke && npm run bundle:functions",
     "bundle:functions": "node ./scripts/bundle-functions.mjs",
     "map:style": "node ./scripts/build-map-style.mjs",
-    "visual": "node ./visual.mjs"
+    "visual": "node ./visual.mjs",
+    "units": "node ./units.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",

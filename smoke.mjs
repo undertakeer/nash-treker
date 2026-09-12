@@ -100,6 +100,11 @@ if (mounted && process.argv[3] === "auth") {
   await click("Сегодня");
   await click("Задачи");
   await click("Купить корм");   await click("Отмена");
+  await click("Лечение");
+  await click("Роаккутан");   await click("Отмена");
+  await click("Курс");
+  await click("Вехи");
+  await click("Сдать биохимию"); await click("Отмена");
   await click("Карта");
   // WebGL в jsdom нет, поэтому карта честно уходит в заглушку — проверяем,
   // что экран показал хоть что-то из двух, а не белое пятно
