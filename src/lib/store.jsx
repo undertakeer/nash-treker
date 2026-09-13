@@ -6,7 +6,7 @@ import { readCache, writeCache } from "./cache";
 import { todayISO } from "./date";
 import { emailToLogin } from "./auth";
 import { pathFromPublicUrl, photoVariants } from "./image";
-import { streak } from "./stats";
+import { freezesLeftInWeek, streak } from "./stats";
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -26,8 +26,10 @@ export const TAB_GAP_MAX = 44;
 /** Баллы за активность */
 export const POINTS_PER_CHECKIN = 10;
 export const POINTS_PER_BADGE = 100;
-/** Сколько заморозок стрика доступно в месяц */
-export const FREEZE_LIMIT = 2;
+/** Сколько заморозок стрика доступно каждой привычке за неделю.
+    Считаем по ISO-неделе того дня, который морозим, поэтому запас
+    восстанавливается сам каждый понедельник и не копится. */
+export const FREEZE_PER_WEEK = 2;
 
 /** Достижения, которые выдаём на клиенте после отметки */
 const STREAK_BADGES = [
@@ -341,11 +343,12 @@ export function StoreProvider({ children }) {
     [freezes]
   );
 
-  const freezesLeft = useMemo(() => {
-    const month = todayISO().slice(0, 7);
-    const used = freezes.filter((f) => f.user_id === uid && f.day.slice(0, 7) === month).length;
-    return Math.max(0, FREEZE_LIMIT - used);
-  }, [freezes, uid]);
+  /** Сколько заморозок осталось у этой привычки на неделе указанного дня */
+  const freezesLeftFor = useCallback(
+    (habitId, day = todayISO()) =>
+      freezesLeftInWeek(freezes, { userId: uid, habitId, day, limit: FREEZE_PER_WEEK }),
+    [freezes, uid]
+  );
 
   const points = useMemo(() => {
     const earned =
@@ -681,8 +684,8 @@ export function StoreProvider({ children }) {
   // ---------- заморозка стрика ----------
   const freezeDay = useCallback(
     async (habit, day, reason) => {
-      if (freezesLeft <= 0) {
-        showToast(`Заморозки кончились — ${FREEZE_LIMIT} в месяц`, "🧊");
+      if (freezesLeftFor(habit.id, day) <= 0) {
+        showToast(`На этой неделе заморозки для «${habit.title}» кончились`, "🧊");
         return false;
       }
       const row = { user_id: uid, habit_id: habit.id, day, reason: reason || null };
@@ -695,7 +698,7 @@ export function StoreProvider({ children }) {
       showToast("День заморожен — стрик цел", "🧊");
       return true;
     },
-    [uid, freezesLeft, showToast]
+    [uid, freezesLeftFor, showToast]
   );
 
   const unfreezeDay = useCallback(
@@ -1270,7 +1273,7 @@ export function StoreProvider({ children }) {
   const value = {
     session, uid, me, partner, profiles,
     habits, checkins, events, achievements, prefs,
-    freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeft,
+    freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeftFor,
     meds, medTakes, medEvents, takenKeys,
     envelopes, finOps, tabs, tabGap,
     missing,

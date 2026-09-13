@@ -9,7 +9,7 @@ import { buildSync } from "esbuild";
 
 const tmp = path.join(os.tmpdir(), `nt-units-${process.pid}.mjs`);
 buildSync({
-  entryPoints: ["src/lib/meds.js"],
+  entryPoints: ["units.entry.js"],
   bundle: true,
   format: "esm",
   platform: "node",
@@ -109,6 +109,36 @@ check("offsetToISO: месяцы и короткий месяц", () => {
   assert.equal(M.offsetToISO({ months: 4 }, "2026-09-12"), "2027-01-12");
   assert.equal(M.offsetToISO({ days: 14 }, "2026-09-12"), "2026-09-26");
   assert.equal(M.offsetToISO({ months: 1 }, "2026-01-31"), "2026-02-28");
+});
+
+check("freezesLeftInWeek: 2 на привычку в неделю", () => {
+  const f = (habit, d) => ({ user_id: "u1", habit_id: habit, day: d });
+  const args = { userId: "u1", habitId: "h1", day: T, limit: 2 };
+  assert.equal(M.freezesLeftInWeek([], args), 2, "ничего не заморожено");
+  // 2026-09-12 — пятница, её неделя: Пн 07.09 — Вс 13.09
+  assert.equal(M.freezesLeftInWeek([f("h1", day(-1))], args), 1);
+  assert.equal(M.freezesLeftInWeek([f("h1", day(-1)), f("h1", day(-2))], args), 0);
+  assert.equal(M.freezesLeftInWeek([f("h1", day(-1)), f("h1", day(-2)), f("h1", day(-3))], args), 0,
+    "ниже нуля не уходим");
+});
+
+check("freezesLeftInWeek: у каждой привычки свой запас", () => {
+  const f = (habit, d) => ({ user_id: "u1", habit_id: habit, day: d });
+  const rows = [f("h1", day(-1)), f("h1", day(-2)), f("h2", day(-1))];
+  assert.equal(M.freezesLeftInWeek(rows, { userId: "u1", habitId: "h1", day: T, limit: 2 }), 0);
+  assert.equal(M.freezesLeftInWeek(rows, { userId: "u1", habitId: "h2", day: T, limit: 2 }), 1);
+  assert.equal(M.freezesLeftInWeek(rows, { userId: "u2", habitId: "h1", day: T, limit: 2 }), 2,
+    "чужие заморозки не считаются");
+});
+
+check("freezesLeftInWeek: запас обновляется в понедельник", () => {
+  const f = (d) => ({ user_id: "u1", habit_id: "h1", day: d });
+  const args = (d) => ({ userId: "u1", habitId: "h1", day: d, limit: 2 });
+  // T = пятница 12.09, её понедельник — 07.09
+  const spent = [f("2026-09-07"), f("2026-09-08")];
+  assert.equal(M.freezesLeftInWeek(spent, args(T)), 0, "на этой неделе кончились");
+  assert.equal(M.freezesLeftInWeek(spent, args("2026-09-14")), 2, "в понедельник снова две");
+  assert.equal(M.freezesLeftInWeek(spent, args("2026-09-06")), 2, "прошлая неделя не тронута");
 });
 
 check("dayPartOf: раскладка по частям дня", () => {

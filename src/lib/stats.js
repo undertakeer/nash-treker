@@ -149,3 +149,17 @@ export function goalProgress(habit, doneCount) {
     reached: doneCount >= habit.goal_days,
   };
 }
+
+/**
+ * Сколько заморозок осталось у привычки на ISO-неделе указанного дня.
+ * Считаем именно по неделе этого дня, а не по текущей: морозить можно и
+ * задним числом, и тогда запас должен браться из той же недели.
+ */
+export function freezesLeftInWeek(freezes, { userId, habitId, day, limit }) {
+  const monday = startOfWeek(day);
+  const sunday = addDays(monday, 6);
+  const used = freezes.filter(
+    (f) => f.user_id === userId && f.habit_id === habitId && f.day >= monday && f.day <= sunday
+  ).length;
+  return Math.max(0, limit - used);
+}

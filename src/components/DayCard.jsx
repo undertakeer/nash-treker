@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { useStore } from "../lib/store";
+import { FREEZE_PER_WEEK, useStore } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
 import { relativeDay } from "../lib/date";
 
@@ -8,11 +8,12 @@ import { relativeDay } from "../lib/date";
 export default function DayCard({ habit, day, colorKey = "mint", canEdit }) {
   const {
     uid, checkinFor, attachPhoto, removePhoto, setNote,
-    freezeSetFor, freezeDay, unfreezeDay, freezesLeft, showToast,
+    freezeSetFor, freezeDay, unfreezeDay, freezesLeftFor, showToast,
   } = useStore();
 
   const row = checkinFor(habit.id, uid, day);
   const frozen = freezeSetFor(habit.id, uid).has(day);
+  const left = freezesLeftFor(habit.id, day);
   const fileRef = useRef(null);
   const [note, setLocalNote] = useState(row?.note || "");
   const [busy, setBusy] = useState(false);
@@ -106,15 +107,18 @@ export default function DayCard({ habit, day, colorKey = "mint", canEdit }) {
         ) : (
           <button
             onClick={() => freezeDay(habit, day)}
-            disabled={Boolean(row) || freezesLeft <= 0}
+            disabled={Boolean(row) || left <= 0}
             className="press text-[13px] font-semibold disabled:opacity-30"
             style={{ color: hex("sky") }}
           >
-            🧊 Заморозить день · осталось {freezesLeft}
+            {left > 0
+              ? `🧊 Заморозить день · осталось ${left} на неделе`
+              : "🧊 Заморозки на этой неделе кончились"}
           </button>
         )}
         <div className="text-[11.5px] text-white/25 mt-1.5 leading-snug">
           Заморозка спасает стрик, когда день пропущен по уважительной причине.
+          У каждой привычки {FREEZE_PER_WEEK} на неделю, запас обновляется в понедельник.
         </div>
       </div>
 
