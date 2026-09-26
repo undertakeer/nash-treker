@@ -7,6 +7,7 @@ import { todayISO } from "./date";
 import { emailToLogin } from "./auth";
 import { pathFromPublicUrl, photoVariants } from "./image";
 import { freezesLeftInWeek, streak } from "./stats";
+import { feeFor } from "./finance";
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -1232,8 +1233,13 @@ export function StoreProvider({ children }) {
   const addFinOp = useCallback(
     async (fields) => {
       if (!uid) return null;
+      // комиссия за снятие считается один раз при записи и хранится рядом:
+      // задним числом процент могли поменять, а история должна остаться прежней
+      const fee = fields.kind === "expense"
+        ? feeFor(fields.amount, me?.fin_fee_percent ?? 1)
+        : 0;
       const { data, error } = await supabase
-        .from("fin_ops").insert({ ...fields, owner_id: uid }).select().single();
+        .from("fin_ops").insert({ ...fields, fee, owner_id: uid }).select().single();
       if (error) {
         showToast(error.code === "42P01" ? NO_TABLE : "Не удалось записать", "⚠️");
         return null;
@@ -1241,7 +1247,7 @@ export function StoreProvider({ children }) {
       setFinOps((prev) => (prev.some((x) => x.id === data.id) ? prev : [data, ...prev]));
       return data;
     },
-    [uid, showToast]
+    [uid, me, showToast]
   );
 
   const deleteFinOp = useCallback(

@@ -148,4 +148,75 @@ check("dayPartOf: раскладка по частям дня", () => {
   assert.equal(M.dayPartOf("23:15").id, "night");
 });
 
+// ---------- деньги ----------
+const F = M.fin;
+const inc = (day, amount) => ({ kind: "income", day, amount });
+const exp = (day, amount, envelope_id = null, fee = 0) => ({ kind: "expense", day, amount, envelope_id, fee });
+
+check("округление: доля вверх до десятков, остальное вниз до доллара", () => {
+  assert.equal(F.roundAllocation(546.6), 550);
+  assert.equal(F.roundAllocation(540), 540, "ровное не раздуваем");
+  assert.equal(F.roundAllocation(540.01), 550);
+  assert.equal(F.roundDown(1445.56), 1445);
+  assert.equal(F.money(1445.56), "$1445");
+  assert.equal(F.moneyExact(1445.56), "$1445.56", "в истории копейки нужны");
+});
+
+check("комиссия 1% добавляется к снятию", () => {
+  assert.equal(F.feeFor(100, 1), 1);
+  assert.equal(F.feeFor(84.5, 1), 0.85);
+  assert.equal(F.withFee({ amount: 100, fee: 1 }), 101);
+  assert.equal(F.walletBalance([inc("2026-09-25", 1000), exp("2026-09-26", 100, null, 1)]), 899);
+});
+
+check("период считается от прихода, а не от начала месяца", () => {
+  const ops = [inc("2026-09-25", 1600)];
+  const p = F.periodFor(ops, "2026-09-26");
+  assert.equal(p.from, "2026-09-25");
+  assert.equal(p.to, "2026-10-24", "до дня перед следующей зарплатой");
+  assert.equal(F.daysLeftIn(p, "2026-09-26"), 29, "а не 5 дней до конца месяца");
+});
+
+check("следующий приход закрывает прошлый период", () => {
+  const ops = [inc("2026-09-25", 1600), inc("2026-10-20", 1600)];
+  const [first, second] = F.periodsOf(ops, "2026-10-21");
+  assert.equal(first.to, "2026-10-19");
+  assert.equal(second.from, "2026-10-20");
+  assert.equal(F.periodFor(ops, "2026-10-21").from, "2026-10-20");
+  assert.equal(F.periodFor(ops, "2026-10-01").from, "2026-09-25", "старый день — старый период");
+});
+
+check("без прихода показываем календарный месяц", () => {
+  const p = F.periodFor([], "2026-09-26");
+  assert.equal(p.from, "2026-09-01");
+  assert.equal(p.to, "2026-09-30");
+});
+
+check("раскладка периода: доли, фиксированные суммы и комиссии", () => {
+  const envelopes = [
+    { id: "a", mode: "percent", plan: 30, position: 1 },
+    { id: "b", mode: "fixed", plan: 250, position: 2 },
+  ];
+  const ops = [
+    inc("2026-09-25", 1822),                 // 30% = 546.60 → 550
+    exp("2026-09-26", 100, "b", 1),          // со снятия удержан доллар
+    exp("2026-09-26", 50, null, 0.5),        // трата без раздела
+  ];
+  const plan = F.periodPlan(envelopes, ops, F.periodFor(ops, "2026-09-26"));
+  assert.equal(plan.rows[0].allocated, 550, "доля округлена вверх");
+  assert.equal(plan.rows[1].spent, 101, "комиссия входит в трату раздела");
+  assert.equal(plan.rows[1].left, 149);
+  assert.equal(plan.looseSpent, 50.5);
+  assert.equal(plan.fees, 1.5);
+  assert.equal(plan.free, 1822 - 550 - 250);
+});
+
+check("траты из прошлого периода не липнут к текущему", () => {
+  const envelopes = [{ id: "b", mode: "fixed", plan: 250, position: 1 }];
+  const ops = [inc("2026-08-25", 1000), exp("2026-09-01", 200, "b"), inc("2026-09-25", 1000)];
+  const plan = F.periodPlan(envelopes, ops, F.periodFor(ops, "2026-09-26"));
+  assert.equal(plan.rows[0].spent, 0, "августовская трата осталась в августе");
+  assert.equal(plan.rows[0].left, 250);
+});
+
 console.log(process.exitCode ? "модульные проверки: ЕСТЬ ПАДЕНИЯ" : `модульные проверки: ${passed} ок`);

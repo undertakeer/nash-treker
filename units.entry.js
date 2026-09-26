@@ -4,3 +4,4 @@
 // имена молча выбрасывает.
 export * from "./src/lib/meds.js";
 export { freezesLeftInWeek } from "./src/lib/stats.js";
+export * as fin from "./src/lib/finance.js";

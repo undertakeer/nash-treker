@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { FREEZE_PER_WEEK, useStore } from "../lib/store";
 import { hex, rgba } from "../lib/theme";
-import { relativeDay } from "../lib/date";
+import { addDays, relativeDay } from "../lib/date";
 
 /** Блок «сегодня»: фото, заметка и заморозка для одного дня привычки */
-export default function DayCard({ habit, day, colorKey = "mint", canEdit }) {
+export default function DayCard({ habit, day: initialDay, colorKey = "mint", canEdit }) {
+  // Заморозить и дописать заметку часто нужно задним числом — даём вчерашний день
+  const [day, setDay] = useState(initialDay);
+  const yesterday = addDays(initialDay, -1);
   const {
     uid, checkinFor, attachPhoto, removePhoto, setNote,
     freezeSetFor, freezeDay, unfreezeDay, freezesLeftFor, showToast,
@@ -40,7 +43,21 @@ export default function DayCard({ habit, day, colorKey = "mint", canEdit }) {
   return (
     <div className="rounded-2xl bg-white/5 border border-white/8 overflow-hidden mb-6">
       <div className="px-4 pt-3.5 pb-2 flex items-center justify-between">
-        <div className="text-[13px] font-semibold text-white/45">{relativeDay(day)}</div>
+        <div className="flex items-center gap-1.5">
+          {[initialDay, yesterday].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDay(d)}
+              className="press px-2.5 py-1 rounded-lg text-[12.5px] font-semibold"
+              style={{
+                background: day === d ? rgba(colorKey, 0.22) : "rgba(255,255,255,.05)",
+                color: day === d ? hex(colorKey) : "rgba(255,255,255,.45)",
+              }}
+            >
+              {relativeDay(d)}
+            </button>
+          ))}
+        </div>
         {frozen && (
           <span
             className="text-[11.5px] font-bold px-2 py-0.5 rounded-full"

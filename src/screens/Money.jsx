@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MissingTable from "../components/MissingTable";
-import { Button, Empty, Field, Progress, TextInput } from "../components/ui";
+import { Button, Empty, Field, Progress, Switch, TextInput } from "../components/ui";
 import Sheet from "../components/Sheet";
 import EmojiPicker from "../components/EmojiPicker";
 import { useStore } from "../lib/store";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
-import { humanDate, todayISO } from "../lib/date";
+import { addDays, humanDate, todayISO } from "../lib/date";
 import {
-  daysLeftInMonth, money, monthKey, monthLabel, monthPlan, shiftMonth, walletBalance,
+  daysLeftIn, feeFor, money, moneyExact, periodLabel, periodPlan, periodsOf, walletBalance, withFee,
 } from "../lib/finance";
 
 const EMOJI = [
@@ -21,15 +21,24 @@ export default function Money({ onOpenOps }) {
   const currency = me?.fin_currency || "$";
   const today = todayISO();
 
-  const [month, setMonth] = useState(() => monthKey(today));
   const [editor, setEditor] = useState(null);   // { envelope } | { envelope: null }
-  const [spend, setSpend] = useState(null);     // конверт, из которого пишем трату
+  const [spend, setSpend] = useState(null);     // раздел, из которого пишем трату
   const [income, setIncome] = useState(false);
+  const [closedOpen, setClosedOpen] = useState(false);
 
-  const plan = useMemo(() => monthPlan(envelopes, finOps, month), [envelopes, finOps, month]);
+  // периоды идут от прихода до прихода, а не по календарю
+  const periods = useMemo(() => periodsOf(finOps, today), [finOps, today]);
+  const [index, setIndex] = useState(null);
+  const at = index === null ? periods.length - 1 : Math.min(index, periods.length - 1);
+  const period = periods[at];
+
+  const plan = useMemo(() => periodPlan(envelopes, finOps, period), [envelopes, finOps, period]);
   const balance = useMemo(() => walletBalance(finOps), [finOps]);
-  const daysLeft = daysLeftInMonth(month, today);
+  const daysLeft = daysLeftIn(period, today);
 
+  // израсходованные разделы уезжают в отдельную шторку, чтобы не мешали
+  const openRows = plan.rows.filter((r) => r.left > 0);
+  const closedRows = plan.rows.filter((r) => r.left <= 0);
   const live = plan.rows.length;
 
   return (
@@ -67,7 +76,8 @@ export default function Money({ onOpenOps }) {
         </div>
         <div className="text-[38px] font-extrabold leading-none">{money(balance, currency)}</div>
         <div className="text-[12.5px] text-white/45 mt-2">
-          за {monthLabel(month)}: пришло {money(plan.income, currency)} · снято {money(plan.spent, currency)}
+          с {humanDate(period.from)}: пришло {money(plan.income, currency)} · снято {money(plan.spent, currency)}
+          {plan.fees > 0 ? ` · комиссия ${moneyExact(plan.fees, currency)}` : ""}
         </div>
         <div className="grid grid-cols-2 gap-2 mt-4">
           <button
@@ -89,18 +99,24 @@ export default function Money({ onOpenOps }) {
       {/* месяц */}
       <div className="flex items-center justify-between mb-3 px-1">
         <button
-          onClick={() => setMonth((m) => shiftMonth(m, -1))}
-          className="press w-8 h-8 rounded-full bg-white/8 grid place-items-center text-[14px] text-white/50"
-          aria-label="Предыдущий месяц"
+          onClick={() => setIndex(Math.max(0, at - 1))}
+          disabled={at <= 0}
+          className="press w-8 h-8 rounded-full bg-white/8 grid place-items-center text-[14px] text-white/50 disabled:opacity-25"
+          aria-label="Предыдущий период"
         >
           ‹
         </button>
-        <div className="text-[14px] font-bold">{monthLabel(month)}</div>
+        <div className="text-center">
+          <div className="text-[14px] font-bold">{periodLabel(period, today)}</div>
+          {daysLeft !== null && (
+            <div className="text-[11.5px] text-white/35">осталось {daysLeft} дн. до следующего прихода</div>
+          )}
+        </div>
         <button
-          onClick={() => setMonth((m) => shiftMonth(m, 1))}
-          disabled={month >= monthKey(today)}
+          onClick={() => setIndex(Math.min(periods.length - 1, at + 1))}
+          disabled={at >= periods.length - 1}
           className="press w-8 h-8 rounded-full bg-white/8 grid place-items-center text-[14px] text-white/50 disabled:opacity-25"
-          aria-label="Следующий месяц"
+          aria-label="Следующий период"
         >
           ›
         </button>
@@ -135,7 +151,7 @@ export default function Money({ onOpenOps }) {
       ) : (
         <div className="space-y-2.5">
           <AnimatePresence initial={false}>
-            {plan.rows.map((row) => (
+            {openRows.map((row) => (
               <EnvelopeRow
                 key={row.envelope.id}
                 row={row}
@@ -147,6 +163,16 @@ export default function Money({ onOpenOps }) {
               />
             ))}
           </AnimatePresence>
+
+          {closedRows.length > 0 && (
+            <button
+              onClick={() => setClosedOpen(true)}
+              className="press w-full py-3 rounded-2xl bg-white/5 border border-white/8 text-[14px] font-semibold text-white/55 flex items-center justify-center gap-2"
+            >
+              Израсходованы · {closedRows.length}
+              <span className="text-white/25">›</span>
+            </button>
+          )}
 
           <button
             onClick={() => setEditor({ envelope: null })}
@@ -164,6 +190,15 @@ export default function Money({ onOpenOps }) {
         </div>
       )}
 
+      <ClosedEnvelopes
+        open={closedOpen}
+        rows={closedRows}
+        currency={currency}
+        onClose={() => setClosedOpen(false)}
+        onSpend={(e) => { setClosedOpen(false); setSpend(e); }}
+        onEdit={(e) => { setClosedOpen(false); setEditor({ envelope: e }); }}
+      />
+
       <EnvelopeEditor
         open={Boolean(editor)}
         envelope={editor?.envelope || null}
@@ -176,6 +211,7 @@ export default function Money({ onOpenOps }) {
         envelope={spend}
         currency={currency}
         onClose={() => setSpend(null)}
+        feePercent={me?.fin_fee_percent ?? 1}
         onSubmit={async (amount, note) => {
           await addFinOp({
             envelope_id: spend?.id || null,
@@ -191,10 +227,12 @@ export default function Money({ onOpenOps }) {
       <IncomeSheet
         open={income}
         currency={currency}
+        today={today}
         onClose={() => setIncome(false)}
-        onSubmit={async (amount, note) => {
-          await addFinOp({ envelope_id: null, kind: "income", amount, note: note || null, day: today });
+        onSubmit={async (amount, note, day) => {
+          await addFinOp({ envelope_id: null, kind: "income", amount, note: note || null, day });
           setIncome(false);
+          setIndex(null);
         }}
       />
     </div>
@@ -206,7 +244,8 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
   const color = e.color || "mint";
   const pct = allocated > 0 ? Math.min(100, Math.round((spent / allocated) * 100)) : 0;
   const over = left < 0;
-  const perDay = daysLeft && left > 0 ? left / daysLeft : null;
+  // у разовых трат вроде связи или подписки дневной темп ничего не значит
+  const perDay = e.show_pace !== false && daysLeft && left > 0 ? left / daysLeft : null;
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}>
@@ -253,7 +292,7 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
           <div className="flex items-center justify-between mt-2">
             <div className="text-[11.5px] text-white/35">
               потрачено {money(spent, currency)}
-              {perDay ? ` · ${money(perDay, currency)} в день` : ""}
+              {perDay ? ` · ещё ${money(perDay, currency)} в день` : ""}
             </div>
             <button
               onClick={onSpend}
@@ -269,10 +308,16 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
   );
 }
 
-function AmountSheet({ open, title, hint, actionLabel, colorKey, currency, onClose, onSubmit }) {
+function AmountSheet({
+  open, title, hint, actionLabel, colorKey, currency, onClose, onSubmit,
+  withDate = false, today, feePercent = 0,
+}) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [day, setDay] = useState(today);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => { if (open) setDay(today); }, [open, today]);
 
   const value = Number(String(amount).replace(",", "."));
   const valid = Number.isFinite(value) && value > 0;
@@ -281,7 +326,7 @@ function AmountSheet({ open, title, hint, actionLabel, colorKey, currency, onClo
     if (!valid || busy) return;
     setBusy(true);
     try {
-      await onSubmit(Math.round(value * 100) / 100, note.trim());
+      await onSubmit(Math.round(value * 100) / 100, note.trim(), day);
       setAmount("");
       setNote("");
     } finally {
@@ -317,6 +362,43 @@ function AmountSheet({ open, title, hint, actionLabel, colorKey, currency, onClo
             </div>
           </Field>
 
+          {feePercent > 0 && valid && (
+            <div className="text-[12.5px] text-white/40 -mt-2">
+              Комиссия за снятие {feePercent}% — {moneyExact(feeFor(value, feePercent), currency)}.
+              С кошелька уйдёт {moneyExact(value + feeFor(value, feePercent), currency)}.
+            </div>
+          )}
+
+          {withDate && (
+            <Field label="Когда пришли" hint="От этой даты считается период: остаток делится до следующего прихода.">
+              <div className="flex gap-2 mb-2">
+                {[
+                  { v: today, t: "Сегодня" },
+                  { v: addDays(today, -1), t: "Вчера" },
+                ].map((o) => (
+                  <button
+                    key={o.v}
+                    onClick={() => setDay(o.v)}
+                    className="press flex-1 py-2.5 rounded-xl text-[13px] font-bold"
+                    style={{
+                      background: day === o.v ? hex(colorKey) : "rgba(255,255,255,.06)",
+                      color: day === o.v ? "#0A0A0E" : "rgba(255,255,255,.55)",
+                    }}
+                  >
+                    {o.t}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="date"
+                value={day}
+                max={today}
+                onChange={(e) => setDay(e.target.value || today)}
+                className="w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 outline-none font-semibold"
+              />
+            </Field>
+          )}
+
           <Field label="На что">
             <TextInput
               value={note}
@@ -336,7 +418,7 @@ function AmountSheet({ open, title, hint, actionLabel, colorKey, currency, onClo
   );
 }
 
-function SpendSheet({ envelope, currency, onClose, onSubmit }) {
+function SpendSheet({ envelope, currency, feePercent, onClose, onSubmit }) {
   return (
     <AmountSheet
       open={Boolean(envelope)}
@@ -345,30 +427,87 @@ function SpendSheet({ envelope, currency, onClose, onSubmit }) {
       actionLabel="Записать трату"
       colorKey={envelope?.color || "rose"}
       currency={currency}
+      feePercent={feePercent}
       onClose={onClose}
       onSubmit={onSubmit}
     />
   );
 }
 
-function IncomeSheet({ open, currency, onClose, onSubmit }) {
+function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
   return (
     <AmountSheet
       open={open}
       title="Пришли деньги"
-      hint="Приход добавится на кошелёк и разойдётся по процентным разделам."
+      hint="Приход добавится на кошелёк и разойдётся по долям."
       actionLabel="Записать приход"
       colorKey="mint"
       currency={currency}
+      withDate
+      today={today}
       onClose={onClose}
       onSubmit={onSubmit}
     />
+  );
+}
+
+/** Разделы, из которых уже нечего брать. Убраны с глаз, но открыть можно. */
+function ClosedEnvelopes({ open, rows, currency, onClose, onSpend, onEdit }) {
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <div className="px-5 pb-10">
+        <div className="flex items-center justify-between py-3">
+          <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Закрыть</button>
+          <div className="text-[15px] font-bold">Израсходованы</div>
+          <span className="w-14" />
+        </div>
+
+        <div className="text-[13px] text-white/40 leading-relaxed mb-4">
+          Лимит выбран до конца. Тратить всё ещё можно — раздел уйдёт в минус,
+          и это будет видно.
+        </div>
+
+        <div className="space-y-2">
+          {rows.map(({ envelope: e, allocated, spent, left }) => {
+            const color = e.color || "mint";
+            const over = left < 0;
+            return (
+              <div
+                key={e.id}
+                className="flex items-center gap-3 px-3.5 py-3 rounded-2xl"
+                style={{
+                  background: rgba(over ? "rose" : color, 0.1),
+                  border: `1px solid ${rgba(over ? "rose" : color, 0.2)}`,
+                }}
+              >
+                <span className="text-[19px] shrink-0">{e.emoji}</span>
+                <button onClick={() => onEdit(e)} className="press flex-1 min-w-0 text-left">
+                  <span className="block text-[14.5px] font-bold truncate">{e.title}</span>
+                  <span className="block text-[12px] text-white/40 truncate">
+                    {money(spent, currency)} из {money(allocated, currency)}
+                    {over ? ` · перебор ${money(-left, currency)}` : ""}
+                  </span>
+                </button>
+                <button
+                  onClick={() => onSpend(e)}
+                  className="press px-3 py-1.5 rounded-lg text-[12px] font-bold shrink-0"
+                  style={{ background: rgba(color, 0.22), color: hex(color) }}
+                >
+                  Трата
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Sheet>
   );
 }
 
 function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
   const { createEnvelope, updateEnvelope, deleteEnvelope } = useStore();
-  const [form, setForm] = useState({ title: "", emoji: "💵", color: "mint", mode: "fixed", plan: "", note: "" });
+  const EMPTY = { title: "", emoji: "💵", color: "mint", mode: "fixed", plan: "", note: "", show_pace: true };
+  const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const editing = Boolean(envelope);
@@ -377,7 +516,7 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
     if (!open) return;
     setForm(envelope
       ? { ...envelope, plan: String(envelope.plan ?? ""), note: envelope.note || "" }
-      : { title: "", emoji: "💵", color: "mint", mode: "fixed", plan: "", note: "" });
+      : EMPTY);
     setConfirmDelete(false);
   }, [open, envelope]);
 
@@ -396,6 +535,7 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
       mode: form.mode,
       plan: Math.round(planValue * 100) / 100,
       note: form.note?.trim() || null,
+      show_pace: form.show_pace !== false,
     };
     try {
       if (editing) await updateEnvelope(envelope.id, payload);
@@ -473,6 +613,20 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
               </span>
             </div>
           </Field>
+
+          <div className="rounded-2xl bg-white/5 border border-white/8 px-4 py-3.5 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[15px] font-semibold">Считать на день</div>
+              <div className="text-[12.5px] text-white/35 leading-relaxed">
+                Для еды и бензина полезно. Для связи или подписки — нет: это
+                разовая трата, делить её по дням незачем.
+              </div>
+            </div>
+            <Switch
+              checked={form.show_pace !== false}
+              onChange={(v) => set({ show_pace: v })}
+            />
+          </div>
 
           <Field label="Заметка">
             <TextInput
@@ -563,11 +717,18 @@ export function MoneyOps({ open, onClose }) {
                       {e && !plus ? ` · ${e.title}` : ""}
                     </div>
                   </div>
-                  <div
-                    className="text-[15px] font-extrabold shrink-0"
-                    style={{ color: plus ? hex("mint") : "#fff" }}
-                  >
-                    {plus ? "+" : "−"}{money(o.amount, currency)}
+                  <div className="text-right shrink-0">
+                    <div
+                      className="text-[15px] font-extrabold"
+                      style={{ color: plus ? hex("mint") : "#fff" }}
+                    >
+                      {plus ? "+" : "−"}{moneyExact(plus ? o.amount : withFee(o), currency)}
+                    </div>
+                    {!plus && Number(o.fee) > 0 && (
+                      <div className="text-[11px] text-white/30">
+                        в т.ч. комиссия {moneyExact(o.fee, currency)}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => deleteFinOp(o.id)}
