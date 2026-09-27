@@ -8,7 +8,8 @@ import { useStore } from "../lib/store";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
 import { addDays, humanDate, todayISO } from "../lib/date";
 import {
-  daysLeftIn, feeFor, money, moneyExact, periodLabel, periodPlan, periodsOf, walletBalance, withFee,
+  cleanAmountInput, daysLeftIn, feeFor, money, moneyExact, parseAmount,
+  periodLabel, periodPlan, periodsOf, walletBalance, withFee,
 } from "../lib/finance";
 
 const EMOJI = [
@@ -319,14 +320,14 @@ function AmountSheet({
 
   useEffect(() => { if (open) setDay(today); }, [open, today]);
 
-  const value = Number(String(amount).replace(",", "."));
-  const valid = Number.isFinite(value) && value > 0;
+  const value = parseAmount(amount);
+  const valid = value !== null && value > 0;
 
   async function submit() {
     if (!valid || busy) return;
     setBusy(true);
     try {
-      await onSubmit(Math.round(value * 100) / 100, note.trim(), day);
+      await onSubmit(value, note.trim(), day);
       setAmount("");
       setNote("");
     } finally {
@@ -348,12 +349,10 @@ function AmountSheet({
             <div className="flex items-center gap-2">
               <span className="text-[22px] font-extrabold text-white/35 shrink-0">{currency}</span>
               <TextInput
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min={0}
-                step="0.01"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(cleanAmountInput(e.target.value))}
                 onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
                 placeholder="0"
                 className="flex-1 min-w-0 text-[20px] font-extrabold"
@@ -522,8 +521,8 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const color = form.color || "mint";
-  const planValue = Number(String(form.plan).replace(",", "."));
-  const valid = form.title.trim() && Number.isFinite(planValue) && planValue >= 0;
+  const planValue = parseAmount(form.plan);
+  const valid = Boolean(form.title.trim()) && planValue !== null && planValue >= 0;
 
   async function save() {
     if (!valid || busy) return;
@@ -533,7 +532,7 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
       emoji: form.emoji,
       color: form.color,
       mode: form.mode,
-      plan: Math.round(planValue * 100) / 100,
+      plan: planValue,
       note: form.note?.trim() || null,
       show_pace: form.show_pace !== false,
     };
@@ -599,12 +598,10 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
             </div>
             <div className="flex items-center gap-2">
               <TextInput
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min={0}
-                step={form.mode === "percent" ? "1" : "0.01"}
                 value={form.plan}
-                onChange={(e) => set({ plan: e.target.value })}
+                onChange={(e) => set({ plan: cleanAmountInput(e.target.value) })}
                 placeholder="0"
                 className="flex-1 min-w-0 text-[17px] font-bold"
               />

@@ -14,7 +14,11 @@ export const roundAllocation = (v) => Math.ceil(cents(v) / 10) * 10;
 export const roundDown = (v) => Math.trunc(cents(v));
 
 export const money = (v, currency = "$") => {
-  const n = roundDown(v);
+  const exact = cents(v);
+  const n = roundDown(exact);
+  // копейки отбрасываем, но если от суммы при этом ничего не остаётся,
+  // показываем как есть: иначе введённые 0.80 выглядят как «ничего»
+  if (n === 0 && exact !== 0) return moneyExact(exact, currency);
   return currency === "$" || currency === "€" ? `${currency}${n}` : `${n} ${currency}`;
 };
 
@@ -24,6 +28,25 @@ export const moneyExact = (v, currency = "$") => {
   const body = Number.isInteger(n) ? String(n) : n.toFixed(2);
   return currency === "$" || currency === "€" ? `${currency}${body}` : `${body} ${currency}`;
 };
+
+/**
+ * Разбор суммы из поля ввода. Поле текстовое, а не number: браузер у
+ * type="number" молча съедает запятую целиком, и «0,80» приходит пустой
+ * строкой. Принимаем и запятую, и точку, пробелы выкидываем.
+ */
+export function parseAmount(raw) {
+  const s = String(raw ?? "").trim().replace(/\s/g, "").replace(",", ".");
+  if (!s || s === "." || !/^\d*\.?\d*$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? cents(n) : null;
+}
+
+/** То, что можно оставить в поле во время набора: цифры и один разделитель */
+export function cleanAmountInput(raw) {
+  const s = String(raw ?? "").replace(/[^\d.,]/g, "").replace(",", ".");
+  const [head, ...rest] = s.split(".");
+  return rest.length ? `${head}.${rest.join("").slice(0, 2)}` : head;
+}
 
 /** Комиссия за снятие: считаем от суммы траты */
 export const feeFor = (amount, percent) => cents((num(amount) * num(percent)) / 100);

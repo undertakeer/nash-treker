@@ -7,6 +7,7 @@ import { Button, Empty, Field, SegmentedControl, TextInput } from "../components
 import { useStore } from "../lib/store";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
 import { CURRENCIES, formatPrice, hostOf, normalizeUrl, totalByCurrency } from "../lib/money";
+import { cleanAmountInput, parseAmount } from "../lib/finance";
 import { humanDateFull } from "../lib/date";
 
 const EMOJI = [
@@ -221,7 +222,7 @@ function WishEditor({ open, item, ownerId, onClose }) {
       emoji: form.emoji,
       color: form.color,
       note: form.note?.trim() || null,
-      price: form.price === "" ? null : Number(form.price),
+      price: form.price === "" ? null : parseAmount(form.price),
       currency: form.currency,
       url: normalizeUrl(form.url),
       priority: form.priority ? 1 : 0,
@@ -298,11 +299,10 @@ function WishEditor({ open, item, ownerId, onClose }) {
           <Field label="Цена" hint="Необязательно — просто чтобы понимать порядок.">
             <div className="flex gap-2">
               <TextInput
-                type="number"
-                inputMode="numeric"
-                min={0}
+                type="text"
+                inputMode="decimal"
                 value={form.price}
-                onChange={(e) => set({ price: e.target.value })}
+                onChange={(e) => set({ price: cleanAmountInput(e.target.value) })}
                 placeholder="1 200 000"
                 className="flex-1 min-w-0"
               />

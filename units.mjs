@@ -162,6 +162,31 @@ check("округление: доля вверх до десятков, оста
   assert.equal(F.moneyExact(1445.56), "$1445.56", "в истории копейки нужны");
 });
 
+check("сумма читается и с запятой, и с точкой", () => {
+  assert.equal(F.parseAmount("0,80"), 0.8, "запятая — основная причина жалобы");
+  assert.equal(F.parseAmount("0.80"), 0.8);
+  assert.equal(F.parseAmount(" 1 234,5 "), 1234.5, "пробелы выкидываем");
+  assert.equal(F.parseAmount("12"), 12);
+  assert.equal(F.parseAmount("0"), 0);
+  for (const bad of ["", ",", ".", "abc", "1.2.3", null, undefined]) {
+    assert.equal(F.parseAmount(bad), null, `${JSON.stringify(bad)} — не сумма`);
+  }
+});
+
+check("поле ввода чистится, но не мешает набирать", () => {
+  assert.equal(F.cleanAmountInput("0,8"), "0.8");
+  assert.equal(F.cleanAmountInput("0."), "0.", "точку в конце оставляем — человек ещё набирает");
+  assert.equal(F.cleanAmountInput("12abc"), "12");
+  assert.equal(F.cleanAmountInput("1.2.3"), "1.23", "второй разделитель не плодим");
+  assert.equal(F.cleanAmountInput("1.239"), "1.23", "больше двух знаков не нужно");
+});
+
+check("сумма меньше доллара не превращается в ноль", () => {
+  assert.equal(F.money(0.8), "$0.80", "иначе введённые 80 центов выглядят как ничего");
+  assert.equal(F.money(0), "$0");
+  assert.equal(F.money(1.99), "$1", "а вот тут копейки уже отбрасываем");
+});
+
 check("комиссия 1% добавляется к снятию", () => {
   assert.equal(F.feeFor(100, 1), 1);
   assert.equal(F.feeFor(84.5, 1), 0.85);
