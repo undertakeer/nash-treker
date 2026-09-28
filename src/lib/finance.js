@@ -51,8 +51,11 @@ export function cleanAmountInput(raw) {
 /** Комиссия за снятие: считаем от суммы траты */
 export const feeFor = (amount, percent) => cents((num(amount) * num(percent)) / 100);
 
-/** Полная стоимость снятия — трата плюс комиссия */
+/** Полная стоимость траты — сумма плюс удержанная комиссия */
 export const withFee = (op) => cents(num(op.amount) + num(op.fee));
+
+/** Уменьшает ли операция кошелёк: часть трат идёт мимо него */
+export const hitsWallet = (op) => op.kind !== "expense" || !op.off_wallet;
 
 const plusMonth = (iso) => {
   const d = fromISO(iso);
@@ -117,6 +120,7 @@ const inPeriod = (op, period) => op.day >= period.from && op.day <= period.to;
 export function periodPlan(envelopes, ops, period) {
   const mine = ops.filter((o) => inPeriod(o, period));
   const income = mine.filter((o) => o.kind === "income").reduce((s, o) => s + num(o.amount), 0);
+  // правки баланса не считаем приходом: они не про заработок, а про сверку
 
   const live = envelopes.filter((e) => !e.archived);
   const rows = live.map((e) => {
@@ -148,13 +152,21 @@ export function periodPlan(envelopes, ops, period) {
   };
 }
 
-/** На кошельке: всё, что пришло, минус всё, что снято вместе с комиссиями */
+/**
+ * На кошельке: приходы минус снятия с комиссиями, плюс правки баланса.
+ * Траты, помеченные «не с кошелька», в баланс не входят — они записаны
+ * ради лимита раздела, а деньги на них брались не отсюда.
+ */
 export function walletBalance(ops) {
-  return ops.reduce(
-    (s, o) => s + (o.kind === "income" ? num(o.amount) : -withFee(o)),
-    0
-  );
+  return cents(ops.reduce((s, o) => {
+    if (o.kind === "income") return s + num(o.amount);
+    if (o.kind === "adjust") return s + num(o.amount);
+    return hitsWallet(o) ? s - withFee(o) : s;
+  }, 0));
 }
+
+/** Разница между фактическим остатком и посчитанным — для правки баланса */
+export const adjustmentFor = (ops, actual) => cents(num(actual) - walletBalance(ops));
 
 /** Сколько дней периода ещё впереди, считая сегодняшний */
 export function daysLeftIn(period, today = todayISO()) {

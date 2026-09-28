@@ -8,8 +8,8 @@ import { useStore } from "../lib/store";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
 import { addDays, humanDate, todayISO } from "../lib/date";
 import {
-  cleanAmountInput, daysLeftIn, feeFor, money, moneyExact, parseAmount,
-  periodLabel, periodPlan, periodsOf, walletBalance, withFee,
+  adjustmentFor, cleanAmountInput, daysLeftIn, feeFor, hitsWallet, money, moneyExact,
+  parseAmount, periodLabel, periodPlan, periodsOf, walletBalance, withFee,
 } from "../lib/finance";
 
 const EMOJI = [
@@ -19,6 +19,7 @@ const EMOJI = [
 
 export default function Money({ onOpenOps }) {
   const { me, envelopes, finOps, missing, addFinOp } = useStore();
+  const feePercent = Number(me?.fin_fee_percent ?? 1);
   const currency = me?.fin_currency || "$";
   const today = todayISO();
 
@@ -26,6 +27,9 @@ export default function Money({ onOpenOps }) {
   const [spend, setSpend] = useState(null);     // раздел, из которого пишем трату
   const [income, setIncome] = useState(false);
   const [closedOpen, setClosedOpen] = useState(false);
+  const [detail, setDetail] = useState(null);   // раздел, открытый со историей
+  const [fixBalance, setFixBalance] = useState(false);
+  const [editOp, setEditOp] = useState(null);
 
   // периоды идут от прихода до прихода, а не по календарю
   const periods = useMemo(() => periodsOf(finOps, today), [finOps, today]);
@@ -75,7 +79,13 @@ export default function Money({ onOpenOps }) {
         <div className="text-[12px] font-bold tracking-[0.14em] uppercase text-white/45 mb-1.5">
           На кошельке
         </div>
-        <div className="text-[38px] font-extrabold leading-none">{money(balance, currency)}</div>
+        <button
+          onClick={() => setFixBalance(true)}
+          className="press text-[38px] font-extrabold leading-none flex items-baseline gap-2"
+        >
+          {money(balance, currency)}
+          <span className="text-[14px] font-semibold text-white/40">поправить</span>
+        </button>
         <div className="text-[12.5px] text-white/45 mt-2">
           с {humanDate(period.from)}: пришло {money(plan.income, currency)} · снято {money(plan.spent, currency)}
           {plan.fees > 0 ? ` · комиссия ${moneyExact(plan.fees, currency)}` : ""}
@@ -160,7 +170,7 @@ export default function Money({ onOpenOps }) {
                 income={plan.income}
                 daysLeft={daysLeft}
                 onSpend={() => setSpend(row.envelope)}
-                onEdit={() => setEditor({ envelope: row.envelope })}
+                onEdit={() => setDetail(row.envelope)}
               />
             ))}
           </AnimatePresence>
@@ -197,7 +207,41 @@ export default function Money({ onOpenOps }) {
         currency={currency}
         onClose={() => setClosedOpen(false)}
         onSpend={(e) => { setClosedOpen(false); setSpend(e); }}
-        onEdit={(e) => { setClosedOpen(false); setEditor({ envelope: e }); }}
+        onEdit={(e) => { setClosedOpen(false); setDetail(e); }}
+      />
+
+      <EnvelopeDetail
+        envelope={detail}
+        row={detail ? plan.rows.find((r) => r.envelope.id === detail.id) : null}
+        ops={detail ? finOps.filter((o) => o.envelope_id === detail.id) : []}
+        currency={currency}
+        onClose={() => setDetail(null)}
+        onSpend={() => { const e = detail; setDetail(null); setSpend(e); }}
+        onSettings={() => { const e = detail; setDetail(null); setEditor({ envelope: e }); }}
+        onOpenOp={(op) => { setDetail(null); setEditOp(op); }}
+      />
+
+      <BalanceFix
+        open={fixBalance}
+        currency={currency}
+        balance={balance}
+        today={today}
+        onClose={() => setFixBalance(false)}
+        onSubmit={async (actual) => {
+          const delta = adjustmentFor(finOps, actual);
+          if (delta !== 0) {
+            await addFinOp({ envelope_id: null, kind: "adjust", amount: delta, note: "правка баланса", day: today });
+          }
+          setFixBalance(false);
+        }}
+      />
+
+      <OpEditor
+        op={editOp}
+        currency={currency}
+        feePercent={feePercent}
+        envelopes={envelopes}
+        onClose={() => setEditOp(null)}
       />
 
       <EnvelopeEditor
@@ -212,14 +256,16 @@ export default function Money({ onOpenOps }) {
         envelope={spend}
         currency={currency}
         onClose={() => setSpend(null)}
-        feePercent={me?.fin_fee_percent ?? 1}
-        onSubmit={async (amount, note) => {
+        feePercent={feePercent}
+        onSubmit={async (amount, note, day, extra) => {
           await addFinOp({
             envelope_id: spend?.id || null,
             kind: "expense",
             amount,
             note: note || null,
             day: today,
+            off_wallet: extra.offWallet,
+            fee: extra.offWallet || !extra.takeFee ? 0 : feeFor(amount, feePercent),
           });
           setSpend(null);
         }}
@@ -311,14 +357,21 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
 
 function AmountSheet({
   open, title, hint, actionLabel, colorKey, currency, onClose, onSubmit,
-  withDate = false, today, feePercent = 0,
+  withDate = false, withOptions = false, today, feePercent = 0,
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [day, setDay] = useState(today);
+  const [takeFee, setTakeFee] = useState(true);
+  const [offWallet, setOffWallet] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (open) setDay(today); }, [open, today]);
+  useEffect(() => {
+    if (!open) return;
+    setDay(today);
+    setTakeFee(true);
+    setOffWallet(false);
+  }, [open, today]);
 
   const value = parseAmount(amount);
   const valid = value !== null && value > 0;
@@ -327,7 +380,7 @@ function AmountSheet({
     if (!valid || busy) return;
     setBusy(true);
     try {
-      await onSubmit(value, note.trim(), day);
+      await onSubmit(value, note.trim(), day, { takeFee, offWallet });
       setAmount("");
       setNote("");
     } finally {
@@ -361,9 +414,35 @@ function AmountSheet({
             </div>
           </Field>
 
-          {feePercent > 0 && valid && (
+          {withOptions && (
+            <div className="rounded-2xl bg-white/5 border border-white/8 divide-y divide-white/6">
+              <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                <div>
+                  <div className="text-[14.5px] font-semibold">Снято с кошелька</div>
+                  <div className="text-[12.5px] text-white/35 leading-relaxed">
+                    Выключите, если платили не с крипты. Лимит раздела спишется,
+                    баланс кошелька не тронем.
+                  </div>
+                </div>
+                <Switch checked={!offWallet} onChange={(v) => setOffWallet(!v)} />
+              </div>
+              {!offWallet && feePercent > 0 && (
+                <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                  <div>
+                    <div className="text-[14.5px] font-semibold">Комиссия {feePercent}%</div>
+                    <div className="text-[12.5px] text-white/35 leading-relaxed">
+                      Наличкой в офисе или картой — комиссии нет, выключите.
+                    </div>
+                  </div>
+                  <Switch checked={takeFee} onChange={setTakeFee} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {withOptions && valid && !offWallet && takeFee && feePercent > 0 && (
             <div className="text-[12.5px] text-white/40 -mt-2">
-              Комиссия за снятие {feePercent}% — {moneyExact(feeFor(value, feePercent), currency)}.
+              Комиссия — {moneyExact(feeFor(value, feePercent), currency)}.
               С кошелька уйдёт {moneyExact(value + feeFor(value, feePercent), currency)}.
             </div>
           )}
@@ -427,6 +506,7 @@ function SpendSheet({ envelope, currency, feePercent, onClose, onSubmit }) {
       colorKey={envelope?.color || "rose"}
       currency={currency}
       feePercent={feePercent}
+      withOptions
       onClose={onClose}
       onSubmit={onSubmit}
     />
@@ -447,6 +527,345 @@ function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
       onClose={onClose}
       onSubmit={onSubmit}
     />
+  );
+}
+
+/** Одна строка истории: дата, на что, сумма и пометки */
+function OpLine({ op, currency, onClick }) {
+  const plus = op.kind === "income" || (op.kind === "adjust" && Number(op.amount) > 0);
+  const adjust = op.kind === "adjust";
+  const amount = op.kind === "expense" ? withFee(op) : Math.abs(Number(op.amount));
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={!onClick}
+      className="press w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-white/4 border border-white/6 text-left"
+    >
+      <span className="flex-1 min-w-0">
+        <span className="block text-[14.5px] font-semibold truncate">
+          {op.note || (adjust ? "Правка баланса" : plus ? "Приход" : "Трата")}
+        </span>
+        <span className="block text-[12px] text-white/35 truncate">
+          {humanDate(op.day)}
+          {op.kind === "expense" && op.off_wallet ? " · не с кошелька" : ""}
+          {op.kind === "expense" && Number(op.fee) > 0 ? ` · комиссия ${moneyExact(op.fee, currency)}` : ""}
+        </span>
+      </span>
+      <span
+        className="text-[15px] font-extrabold shrink-0"
+        style={{ color: plus ? hex("mint") : adjust ? hex("amber") : "#fff" }}
+      >
+        {plus ? "+" : "−"}{moneyExact(amount, currency)}
+      </span>
+      {onClick && <span className="text-[15px] text-white/20 shrink-0">›</span>}
+    </button>
+  );
+}
+
+/** Раздел целиком: сколько осталось и все траты по нему */
+function EnvelopeDetail({ envelope, row, ops, currency, onClose, onSpend, onSettings, onOpenOp }) {
+  const e = envelope;
+  const color = e?.color || "mint";
+  const history = [...ops].sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+  const total = ops.reduce((s, o) => s + withFee(o), 0);
+
+  return (
+    <Sheet open={Boolean(e)} onClose={onClose} tall>
+      {e && (
+        <div className="px-5 pb-12">
+          <div className="flex items-center justify-between py-3">
+            <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Закрыть</button>
+            <div className="text-[15px] font-bold truncate px-3">{e.title}</div>
+            <button onClick={onSettings} className="press text-[15px] font-bold" style={{ color: hex(color) }}>
+              Настроить
+            </button>
+          </div>
+
+          {row && (
+            <div
+              className="rounded-3xl p-5 mb-4"
+              style={{
+                background: `linear-gradient(168deg, ${rgba(color, 0.12)} 0%, ${rgba(color, 0.34)} 100%), #0F0F14`,
+                border: `1px solid ${rgba(row.left < 0 ? "rose" : color, 0.2)}`,
+              }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-[26px] leading-none">{e.emoji}</span>
+                <div className="min-w-0">
+                  <div className="text-[12px] font-bold tracking-[0.12em] uppercase text-white/45">
+                    осталось в периоде
+                  </div>
+                  <div
+                    className="text-[30px] font-extrabold leading-none"
+                    style={{ color: row.left < 0 ? hex("rose") : "#fff" }}
+                  >
+                    {money(row.left, currency)}
+                  </div>
+                </div>
+              </div>
+              <Progress
+                percent={row.allocated > 0 ? Math.min(100, Math.round((row.spent / row.allocated) * 100)) : 0}
+                colorKey={row.left < 0 ? "rose" : color}
+              />
+              <div className="text-[12.5px] text-white/45 mt-2">
+                потрачено {money(row.spent, currency)} из {money(row.allocated, currency)}
+                {e.mode === "percent" ? ` · ${Number(e.plan)}% от прихода` : ""}
+              </div>
+            </div>
+          )}
+
+          <Button onClick={onSpend} colorKey={color}>Записать трату</Button>
+
+          <div className="flex items-center justify-between mt-6 mb-2.5 px-1">
+            <h3 className="text-[13px] font-bold tracking-[0.1em] uppercase text-white/30">История</h3>
+            {ops.length > 0 && (
+              <span className="text-[12px] text-white/30">всего {money(total, currency)}</span>
+            )}
+          </div>
+
+          {!history.length ? (
+            <div className="text-[13px] text-white/35 px-1 leading-relaxed">
+              Трат по этому разделу ещё не было.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {history.map((op) => (
+                <OpLine key={op.id} op={op} currency={currency} onClick={() => onOpenOp(op)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+/** Правка баланса: вводим фактический остаток, разницу дописываем операцией */
+function BalanceFix({ open, currency, balance, today, onClose, onSubmit }) {
+  const [raw, setRaw] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { if (open) setRaw(String(Math.trunc(balance))); }, [open, balance]);
+
+  const actual = parseAmount(raw);
+  const valid = actual !== null;
+  const delta = valid ? Math.round((actual - balance) * 100) / 100 : 0;
+
+  async function submit() {
+    if (!valid || busy) return;
+    setBusy(true);
+    try {
+      await onSubmit(actual);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <div className="px-5 pb-10">
+        <div className="flex items-center justify-between py-3">
+          <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Отмена</button>
+          <div className="text-[15px] font-bold">Баланс кошелька</div>
+          <span className="w-14" />
+        </div>
+
+        <div className="space-y-5">
+          <Field
+            label="Сколько на самом деле"
+            hint={`Посчитано ${moneyExact(balance, currency)}. Разницу допишем отдельной строкой, история не тронется.`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[22px] font-extrabold text-white/35 shrink-0">{currency}</span>
+              <TextInput
+                type="text"
+                inputMode="decimal"
+                value={raw}
+                onChange={(ev) => setRaw(cleanAmountInput(ev.target.value))}
+                onKeyDown={(ev) => { if (ev.key === "Enter") submit(); }}
+                placeholder="0"
+                className="flex-1 min-w-0 text-[20px] font-extrabold"
+                autoFocus
+              />
+            </div>
+          </Field>
+
+          {valid && delta !== 0 && (
+            <div className="text-[13px] text-white/45">
+              Расхождение {delta > 0 ? "+" : "−"}{moneyExact(Math.abs(delta), currency)} —{" "}
+              {delta > 0 ? "добавим" : "спишем"} правкой.
+            </div>
+          )}
+
+          <Button onClick={submit} disabled={!valid || busy} colorKey="mint">
+            {delta === 0 ? "Всё сходится" : "Поправить"}
+          </Button>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+/** Правка уже записанной операции: сумма, дата, раздел, комиссия */
+function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
+  const { updateFinOp, deleteFinOp } = useStore();
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [day, setDay] = useState("");
+  const [envelopeId, setEnvelopeId] = useState(null);
+  const [takeFee, setTakeFee] = useState(true);
+  const [offWallet, setOffWallet] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!op) return;
+    setAmount(String(Math.abs(Number(op.amount))));
+    setNote(op.note || "");
+    setDay(op.day);
+    setEnvelopeId(op.envelope_id || null);
+    setTakeFee(Number(op.fee) > 0);
+    setOffWallet(Boolean(op.off_wallet));
+    setConfirmDelete(false);
+    setBusy(false);
+  }, [op]);
+
+  const value = parseAmount(amount);
+  const valid = value !== null && value > 0;
+  const expense = op?.kind === "expense";
+  const adjust = op?.kind === "adjust";
+  const sign = adjust && Number(op?.amount) < 0 ? -1 : 1;
+
+  async function save() {
+    if (!valid || busy) return;
+    setBusy(true);
+    const patch = {
+      amount: adjust ? value * sign : value,
+      note: note.trim() || null,
+      day,
+    };
+    if (expense) {
+      patch.envelope_id = envelopeId;
+      patch.off_wallet = offWallet;
+      patch.fee = offWallet || !takeFee ? 0 : feeFor(value, feePercent);
+    }
+    try {
+      await updateFinOp(op.id, patch);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    await deleteFinOp(op.id);
+    onClose();
+  }
+
+  return (
+    <Sheet open={Boolean(op)} onClose={onClose} tall>
+      {op && (
+        <div className="px-5 pb-12">
+          <div className="flex items-center justify-between py-3">
+            <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Отмена</button>
+            <div className="text-[15px] font-bold">
+              {expense ? "Трата" : adjust ? "Правка баланса" : "Приход"}
+            </div>
+            <button
+              onClick={save}
+              disabled={!valid || busy}
+              className="press text-[15px] font-bold disabled:opacity-30"
+              style={{ color: hex("mint") }}
+            >
+              Сохранить
+            </button>
+          </div>
+
+          <div className="space-y-5">
+            <Field label="Сумма" hint="После правки всё пересчитается заново — и остаток раздела, и баланс.">
+              <div className="flex items-center gap-2">
+                <span className="text-[22px] font-extrabold text-white/35 shrink-0">{currency}</span>
+                <TextInput
+                  type="text"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(ev) => setAmount(cleanAmountInput(ev.target.value))}
+                  placeholder="0"
+                  className="flex-1 min-w-0 text-[20px] font-extrabold"
+                />
+              </div>
+            </Field>
+
+            <Field label="На что">
+              <TextInput value={note} onChange={(ev) => setNote(ev.target.value)} maxLength={100} />
+            </Field>
+
+            <Field label="Когда">
+              <input
+                type="date"
+                value={day}
+                onChange={(ev) => setDay(ev.target.value || op.day)}
+                className="w-full px-4 py-3.5 rounded-2xl bg-white/6 border border-white/10 outline-none font-semibold"
+              />
+            </Field>
+
+            {expense && (
+              <>
+                <Field label="Раздел">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setEnvelopeId(null)}
+                      className="press px-3 py-2 rounded-xl text-[13px] font-semibold"
+                      style={{
+                        background: !envelopeId ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.05)",
+                        border: "1px solid rgba(255,255,255,.08)",
+                      }}
+                    >
+                      Без раздела
+                    </button>
+                    {envelopes.filter((e) => !e.archived).map((e) => {
+                      const on = envelopeId === e.id;
+                      return (
+                        <button
+                          key={e.id}
+                          onClick={() => setEnvelopeId(e.id)}
+                          className="press px-3 py-2 rounded-xl text-[13px] font-semibold flex items-center gap-1.5"
+                          style={{
+                            background: on ? rgba(e.color, 0.22) : "rgba(255,255,255,.05)",
+                            border: `1px solid ${on ? rgba(e.color, 0.45) : "rgba(255,255,255,.08)"}`,
+                          }}
+                        >
+                          <span>{e.emoji}</span>{e.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+
+                <div className="rounded-2xl bg-white/5 border border-white/8 divide-y divide-white/6">
+                  <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                    <div className="text-[14.5px] font-semibold">Снято с кошелька</div>
+                    <Switch checked={!offWallet} onChange={(v) => setOffWallet(!v)} />
+                  </div>
+                  {!offWallet && feePercent > 0 && (
+                    <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                      <div className="text-[14.5px] font-semibold">Комиссия {feePercent}%</div>
+                      <Switch checked={takeFee} onChange={setTakeFee} />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <Button variant="danger" onClick={remove}>
+              {confirmDelete ? "Точно удалить?" : "Удалить запись"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Sheet>
   );
 }
 
@@ -679,67 +1098,40 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
 }
 
 export function MoneyOps({ open, onClose }) {
-  const { me, envelopes, finOps, deleteFinOp } = useStore();
+  const { me, envelopes, finOps } = useStore();
   const currency = me?.fin_currency || "$";
-  const byId = useMemo(() => new Map(envelopes.map((e) => [e.id, e])), [envelopes]);
+  const feePercent = Number(me?.fin_fee_percent ?? 1);
+  const [editOp, setEditOp] = useState(null);
 
   return (
-    <Sheet open={open} onClose={onClose} tall>
-      <div className="px-5 pb-12">
-        <div className="flex items-center justify-between py-3">
-          <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Закрыть</button>
-          <div className="text-[15px] font-bold">История операций</div>
-          <span className="w-14" />
-        </div>
-
-        {!finOps.length ? (
-          <Empty emoji="🧾" title="Операций пока нет" subtitle="Записи о приходах и тратах появятся здесь." />
-        ) : (
-          <div className="space-y-1.5">
-            {finOps.map((o) => {
-              const e = o.envelope_id ? byId.get(o.envelope_id) : null;
-              const plus = o.kind === "income";
-              return (
-                <div
-                  key={o.id}
-                  className="flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-white/4 border border-white/6"
-                >
-                  <span className="text-[19px] shrink-0">{plus ? "💚" : e?.emoji || "💸"}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[14.5px] font-semibold truncate">
-                      {o.note || (plus ? "Приход" : e?.title || "Трата")}
-                    </div>
-                    <div className="text-[12px] text-white/35 truncate">
-                      {humanDate(o.day)}
-                      {e && !plus ? ` · ${e.title}` : ""}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div
-                      className="text-[15px] font-extrabold"
-                      style={{ color: plus ? hex("mint") : "#fff" }}
-                    >
-                      {plus ? "+" : "−"}{moneyExact(plus ? o.amount : withFee(o), currency)}
-                    </div>
-                    {!plus && Number(o.fee) > 0 && (
-                      <div className="text-[11px] text-white/30">
-                        в т.ч. комиссия {moneyExact(o.fee, currency)}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => deleteFinOp(o.id)}
-                    className="press w-7 h-7 shrink-0 rounded-full bg-white/6 grid place-items-center text-[13px] text-white/35"
-                    aria-label="Удалить запись"
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
+    <>
+      <Sheet open={open} onClose={onClose} tall>
+        <div className="px-5 pb-12">
+          <div className="flex items-center justify-between py-3">
+            <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Закрыть</button>
+            <div className="text-[15px] font-bold">История операций</div>
+            <span className="w-14" />
           </div>
-        )}
-      </div>
-    </Sheet>
+
+          {!finOps.length ? (
+            <Empty emoji="🧾" title="Операций пока нет" subtitle="Записи о приходах и тратах появятся здесь." />
+          ) : (
+            <div className="space-y-1.5">
+              {finOps.map((o) => (
+                <OpLine key={o.id} op={o} currency={currency} onClick={() => setEditOp(o)} />
+              ))}
+            </div>
+          )}
+        </div>
+      </Sheet>
+
+      <OpEditor
+        op={editOp}
+        currency={currency}
+        feePercent={feePercent}
+        envelopes={envelopes}
+        onClose={() => setEditOp(null)}
+      />
+    </>
   );
 }

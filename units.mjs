@@ -194,6 +194,28 @@ check("комиссия 1% добавляется к снятию", () => {
   assert.equal(F.walletBalance([inc("2026-09-25", 1000), exp("2026-09-26", 100, null, 1)]), 899);
 });
 
+check("траты не с кошелька: лимит съедают, баланс не трогают", () => {
+  const offWallet = { kind: "expense", day: "2026-09-26", amount: 50, fee: 0, envelope_id: "b", off_wallet: true };
+  const ops = [inc("2026-09-25", 1000), exp("2026-09-26", 100, "b", 1), offWallet];
+  assert.equal(F.walletBalance(ops), 899, "снялось только то, что шло с кошелька");
+  const envelopes = [{ id: "b", mode: "fixed", plan: 250, position: 1 }];
+  const plan = F.periodPlan(envelopes, ops, F.periodFor(ops, "2026-09-26"));
+  assert.equal(plan.rows[0].spent, 151, "а лимит раздела съеден весь");
+  assert.equal(plan.rows[0].left, 99);
+});
+
+check("правка баланса: считаем разницу и не путаем с приходом", () => {
+  const ops = [inc("2026-09-25", 1000), exp("2026-09-26", 100, "b", 1)];
+  assert.equal(F.walletBalance(ops), 899);
+  assert.equal(F.adjustmentFor(ops, 850), -49, "фактически меньше — минус");
+  assert.equal(F.adjustmentFor(ops, 900), 1, "фактически больше — плюс");
+
+  const fixed = [...ops, { kind: "adjust", day: "2026-09-27", amount: -49, fee: 0 }];
+  assert.equal(F.walletBalance(fixed), 850, "после правки баланс сходится");
+  const plan = F.periodPlan([], fixed, F.periodFor(fixed, "2026-09-27"));
+  assert.equal(plan.income, 1000, "правка не попала в приход");
+});
+
 check("период считается от прихода, а не от начала месяца", () => {
   const ops = [inc("2026-09-25", 1600)];
   const p = F.periodFor(ops, "2026-09-26");

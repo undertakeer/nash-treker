@@ -7,7 +7,6 @@ import { todayISO } from "./date";
 import { emailToLogin } from "./auth";
 import { pathFromPublicUrl, photoVariants } from "./image";
 import { freezesLeftInWeek, streak } from "./stats";
-import { feeFor } from "./finance";
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -1233,13 +1232,10 @@ export function StoreProvider({ children }) {
   const addFinOp = useCallback(
     async (fields) => {
       if (!uid) return null;
-      // комиссия за снятие считается один раз при записи и хранится рядом:
-      // задним числом процент могли поменять, а история должна остаться прежней
-      const fee = fields.kind === "expense"
-        ? feeFor(fields.amount, me?.fin_fee_percent ?? 1)
-        : 0;
+      // комиссию считает экран: она бывает не на каждом снятии, а хранится
+      // рядом с операцией — процент могли поменять, история должна остаться
       const { data, error } = await supabase
-        .from("fin_ops").insert({ ...fields, fee, owner_id: uid }).select().single();
+        .from("fin_ops").insert({ fee: 0, ...fields, owner_id: uid }).select().single();
       if (error) {
         showToast(error.code === "42P01" ? NO_TABLE : "Не удалось записать", "⚠️");
         return null;
@@ -1247,7 +1243,16 @@ export function StoreProvider({ children }) {
       setFinOps((prev) => (prev.some((x) => x.id === data.id) ? prev : [data, ...prev]));
       return data;
     },
-    [uid, me, showToast]
+    [uid, showToast]
+  );
+
+  const updateFinOp = useCallback(
+    async (id, patch) => {
+      setFinOps((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+      const { error } = await supabase.from("fin_ops").update(patch).eq("id", id);
+      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+    },
+    [showToast]
   );
 
   const deleteFinOp = useCallback(
@@ -1297,7 +1302,7 @@ export function StoreProvider({ children }) {
     createMed, updateMed, deleteMed, toggleDose,
     createMedEvent, updateMedEvent, toggleMedEvent, deleteMedEvent,
     createEnvelope, updateEnvelope, deleteEnvelope,
-    addFinOp, deleteFinOp, setTabs, setTabGap,
+    addFinOp, updateFinOp, deleteFinOp, setTabs, setTabGap,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 
