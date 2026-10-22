@@ -62,12 +62,20 @@ export function authSeed() {
     { id: "en2", owner_id: uid, title: "Девушке", emoji: "💗", color: "pink", mode: "fixed", plan: 126, show_pace: false, position: 2, archived: false, created_at: new Date().toISOString() },
     { id: "en3", owner_id: uid, title: "На жизнь", emoji: "🍔", color: "amber", mode: "fixed", plan: 742, show_pace: true, position: 3, archived: false, created_at: new Date().toISOString() },
     { id: "en4", owner_id: uid, title: "Клод", emoji: "🤖", color: "violet", mode: "fixed", plan: 112, show_pace: false, position: 4, archived: false, created_at: new Date().toISOString() },
+    { id: "en5", owner_id: uid, title: "Здоровье", emoji: "🩹", color: "rose", mode: "free", plan: 0, show_pace: false, position: 5, archived: false, created_at: new Date().toISOString() },
   ]);
   put("finOps", [
     { id: "fo1", owner_id: uid, envelope_id: null, kind: "income", amount: 1822, note: "зарплата", day: salaryDay, fee: 0, created_at: new Date().toISOString() },
     { id: "fo2", owner_id: uid, envelope_id: "en3", kind: "expense", amount: 84.5, note: "продукты", day: today, fee: 0.85, created_at: new Date().toISOString() },
     { id: "fo3", owner_id: uid, envelope_id: "en2", kind: "expense", amount: 126, note: "подарок", day: today, fee: 1.26, created_at: new Date().toISOString() },
     { id: "fo4", owner_id: uid, envelope_id: "en4", kind: "expense", amount: 112, note: "подписка", day: today, fee: 1.12, created_at: new Date().toISOString() },
+    { id: "fo5", owner_id: uid, envelope_id: "en5", kind: "expense", amount: 45, note: "таблетки", day: today, fee: 0, off_wallet: false, created_at: new Date().toISOString() },
+    { id: "fo6", owner_id: uid, envelope_id: null, goal_id: "g1", kind: "save", amount: 100, note: "С прихода — Горы зимой", day: salaryDay, fee: 0, created_at: new Date().toISOString() },
+    { id: "fo7", owner_id: uid, envelope_id: null, goal_id: "g2", kind: "save", amount: 50, note: "С прихода — Подушка", day: salaryDay, fee: 0, created_at: new Date().toISOString() },
+  ]);
+  put("finGoals", [
+    { id: "g1", owner_id: uid, title: "Горы зимой", emoji: "🏔", color: "violet", target: 1000, per_income: 100, position: 1, archived: false, created_at: new Date().toISOString() },
+    { id: "g2", owner_id: uid, title: "Подушка", emoji: "🪙", color: "sky", target: null, per_income: 50, position: 2, archived: false, created_at: new Date().toISOString() },
   ]);
   put("tasks", [
     { id: "t1", title: "Купить корм коту", emoji: "🛒", color: "sky", done: false, due_date: today, due_time: "18:00", assignee_id: null, priority: 1, position: 0, created_at: new Date().toISOString() },

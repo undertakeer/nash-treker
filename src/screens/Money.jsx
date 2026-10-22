@@ -8,8 +8,8 @@ import { useStore } from "../lib/store";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
 import { addDays, humanDate, todayISO } from "../lib/date";
 import {
-  adjustmentFor, cleanAmountInput, daysLeftIn, feeFor, hitsWallet, money, moneyExact,
-  parseAmount, periodLabel, periodPlan, periodsOf, walletBalance, withFee,
+  adjustmentFor, cleanAmountInput, daysLeftIn, feeFor, goalsSummary, money, moneyExact,
+  parseAmount, periodLabel, periodPlan, periodsOf, spendableNow, walletBalance, withFee,
 } from "../lib/finance";
 
 const EMOJI = [
@@ -18,7 +18,7 @@ const EMOJI = [
 ];
 
 export default function Money({ onOpenOps }) {
-  const { me, envelopes, finOps, missing, addFinOp } = useStore();
+  const { me, envelopes, finOps, finGoals, missing, addFinOp, addIncomeWithSavings } = useStore();
   const feePercent = Number(me?.fin_fee_percent ?? 1);
   const currency = me?.fin_currency || "$";
   const today = todayISO();
@@ -30,6 +30,8 @@ export default function Money({ onOpenOps }) {
   const [detail, setDetail] = useState(null);   // раздел, открытый со историей
   const [fixBalance, setFixBalance] = useState(false);
   const [editOp, setEditOp] = useState(null);
+  const [goalEditor, setGoalEditor] = useState(null);
+  const [saveTo, setSaveTo] = useState(null);
 
   // периоды идут от прихода до прихода, а не по календарю
   const periods = useMemo(() => periodsOf(finOps, today), [finOps, today]);
@@ -42,8 +44,12 @@ export default function Money({ onOpenOps }) {
   const daysLeft = daysLeftIn(period, today);
 
   // израсходованные разделы уезжают в отдельную шторку, чтобы не мешали
-  const openRows = plan.rows.filter((r) => r.left > 0);
-  const closedRows = plan.rows.filter((r) => r.left <= 0);
+  const goals = useMemo(() => goalsSummary(finGoals, finOps), [finGoals, finOps]);
+  const spendable = spendableNow(balance, plan.reserved, goals.saved);
+
+  // без лимита разделу нечего исчерпывать — он всегда на виду
+  const openRows = plan.rows.filter((r) => r.unlimited || r.left > 0);
+  const closedRows = plan.rows.filter((r) => !r.unlimited && r.left <= 0);
   const live = plan.rows.length;
 
   return (
@@ -106,6 +112,39 @@ export default function Money({ onOpenOps }) {
           </button>
         </div>
       </div>
+
+      {/* сколько из баланса уже расписано */}
+      {(plan.reserved > 0 || goals.saved > 0) && (
+        <div className="rounded-2xl bg-white/5 border border-white/8 px-4 py-3 mb-3 space-y-1.5">
+          <div className="flex items-center justify-between text-[13px]">
+            <span className="text-white/45">Осталось по разделам</span>
+            <span className="font-bold">{money(plan.reserved, currency)}</span>
+          </div>
+          {goals.saved > 0 && (
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-white/45">Отложено в целях</span>
+              <span className="font-bold">{money(goals.saved, currency)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-1.5 border-t border-white/6">
+            <span className="text-[13px] font-semibold">
+              {spendable < 0 ? "Не хватает на расписанное" : "Свободно сверх этого"}
+            </span>
+            <span
+              className="text-[16px] font-extrabold"
+              style={{ color: spendable < 0 ? hex("rose") : hex("mint") }}
+            >
+              {money(spendable, currency)}
+            </span>
+          </div>
+          {spendable < 0 && (
+            <div className="text-[11.5px] leading-relaxed" style={{ color: hex("rose") }}>
+              На кошельке меньше, чем расписано по лимитам и целям. Снимать нечего —
+              или поправьте лимиты.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* месяц */}
       <div className="flex items-center justify-between mb-3 px-1">
@@ -201,6 +240,67 @@ export default function Money({ onOpenOps }) {
         </div>
       )}
 
+      {(goals.rows.length > 0 || live > 0) && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-2.5 px-1">
+            <h3 className="text-[13px] font-bold tracking-[0.1em] uppercase text-white/30">Цели</h3>
+            <button
+              onClick={() => setGoalEditor({ goal: null })}
+              className="press text-[12.5px] font-semibold text-white/40"
+            >
+              + добавить
+            </button>
+          </div>
+
+          {!goals.rows.length ? (
+            <div className="text-[12.5px] text-white/30 px-1 leading-relaxed">
+              Цель копится поверх разделов и не обнуляется с новой зарплатой.
+              Укажите сумму и сколько откладывать с каждого прихода.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {goals.rows.map((row) => (
+                <GoalRow
+                  key={row.goal.id}
+                  row={row}
+                  currency={currency}
+                  onSave={() => setSaveTo(row.goal)}
+                  onEdit={() => setGoalEditor({ goal: row.goal })}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <GoalEditor
+        open={Boolean(goalEditor)}
+        goal={goalEditor?.goal || null}
+        currency={currency}
+        onClose={() => setGoalEditor(null)}
+      />
+
+      <AmountSheet
+        open={Boolean(saveTo)}
+        title={saveTo ? `${saveTo.emoji} ${saveTo.title}` : ""}
+        hint="Деньги остаются на кошельке, просто помечены под цель."
+        actionLabel="Отложить"
+        colorKey={saveTo?.color || "violet"}
+        currency={currency}
+        onClose={() => setSaveTo(null)}
+        onSubmit={async (amount, note) => {
+          await addFinOp({
+            kind: "save",
+            goal_id: saveTo.id,
+            envelope_id: null,
+            amount,
+            note: note || null,
+            day: today,
+          });
+          setSaveTo(null);
+        }}
+      />
+
       <ClosedEnvelopes
         open={closedOpen}
         rows={closedRows}
@@ -277,7 +377,7 @@ export default function Money({ onOpenOps }) {
         today={today}
         onClose={() => setIncome(false)}
         onSubmit={async (amount, note, day) => {
-          await addFinOp({ envelope_id: null, kind: "income", amount, note: note || null, day });
+          await addIncomeWithSavings({ envelope_id: null, amount, note: note || null, day });
           setIncome(false);
           setIndex(null);
         }}
@@ -287,12 +387,12 @@ export default function Money({ onOpenOps }) {
 }
 
 function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
-  const { envelope: e, allocated, spent, left } = row;
+  const { envelope: e, allocated, spent, left, unlimited } = row;
   const color = e.color || "mint";
   const pct = allocated > 0 ? Math.min(100, Math.round((spent / allocated) * 100)) : 0;
-  const over = left < 0;
+  const over = !unlimited && left < 0;
   // у разовых трат вроде связи или подписки дневной темп ничего не значит
-  const perDay = e.show_pace !== false && daysLeft && left > 0 ? left / daysLeft : null;
+  const perDay = !unlimited && e.show_pace !== false && daysLeft && left > 0 ? left / daysLeft : null;
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}>
@@ -319,8 +419,9 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
               )}
             </div>
             <div className="text-[12.5px] text-white/45">
-              из {money(allocated, currency)}
-              {e.mode === "percent" && income > 0 ? " от прихода" : ""}
+              {unlimited
+                ? "без лимита"
+                : `из ${money(allocated, currency)}${e.mode === "percent" && income > 0 ? " от прихода" : ""}`}
             </div>
           </div>
           <div className="text-right shrink-0">
@@ -328,17 +429,19 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
               className="text-[19px] font-extrabold leading-none"
               style={{ color: over ? hex("rose") : hex(color) }}
             >
-              {money(left, currency)}
+              {money(unlimited ? spent : left, currency)}
             </div>
-            <div className="text-[11px] text-white/35 mt-1">осталось</div>
+            <div className="text-[11px] text-white/35 mt-1">
+              {unlimited ? "за период" : "осталось"}
+            </div>
           </div>
         </div>
 
         <div className="mt-3">
-          <Progress percent={pct} colorKey={over ? "rose" : color} />
+          {!unlimited && <Progress percent={pct} colorKey={over ? "rose" : color} />}
           <div className="flex items-center justify-between mt-2">
             <div className="text-[11.5px] text-white/35">
-              потрачено {money(spent, currency)}
+              {unlimited ? "только учёт, лимита нет" : `потрачено ${money(spent, currency)}`}
               {perDay ? ` · ещё ${money(perDay, currency)} в день` : ""}
             </div>
             <button
@@ -530,10 +633,238 @@ function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
   );
 }
 
+/** Цель-накопление: сколько собрано и сколько осталось до суммы */
+function GoalRow({ row, currency, onSave, onEdit }) {
+  const { goal: g, saved, target, left, percent, done } = row;
+  const color = g.color || "violet";
+
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      <div
+        className="rounded-[22px] p-4"
+        style={{
+          background: `linear-gradient(168deg, ${rgba(color, 0.1)} 0%, ${rgba(color, 0.28)} 100%), #0F0F14`,
+          border: `1px solid ${rgba(done ? "mint" : color, done ? 0.4 : 0.18)}`,
+        }}
+      >
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onEdit}
+          onKeyDown={(ev) => { if (ev.key === "Enter") onEdit(); }}
+          className="flex items-start gap-3 cursor-pointer"
+        >
+          <span className="text-[21px] leading-none shrink-0">{g.emoji}</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[15.5px] font-bold truncate">
+              {g.title}
+              {done && <span className="text-[12px] font-bold" style={{ color: hex("mint") }}> · собрано</span>}
+            </div>
+            <div className="text-[12.5px] text-white/45">
+              {target !== null ? `цель ${money(target, currency)}` : "без конкретной суммы"}
+              {Number(g.per_income) > 0 ? ` · ${money(g.per_income, currency)} с прихода` : ""}
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-[19px] font-extrabold leading-none" style={{ color: hex(color) }}>
+              {money(saved, currency)}
+            </div>
+            <div className="text-[11px] text-white/35 mt-1">отложено</div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          {percent !== null && <Progress percent={percent} colorKey={done ? "mint" : color} />}
+          <div className="flex items-center justify-between mt-2">
+            <div className="text-[11.5px] text-white/35">
+              {left !== null && left > 0 ? `осталось собрать ${money(left, currency)}` : "копится"}
+            </div>
+            <button
+              onClick={onSave}
+              className="press px-3 py-1.5 rounded-lg text-[12px] font-bold"
+              style={{ background: rgba(color, 0.22), color: hex(color) }}
+            >
+              Отложить
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/** Настройка цели: сумма и сколько уходит туда с каждой зарплаты */
+function GoalEditor({ open, goal, currency, onClose }) {
+  const { createGoalSaving, updateGoalSaving, deleteGoalSaving } = useStore();
+  const EMPTY = { title: "", emoji: "🎯", color: "violet", target: "", per_income: "", note: "" };
+  const [form, setForm] = useState(EMPTY);
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const editing = Boolean(goal);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(goal
+      ? {
+          ...goal,
+          target: goal.target === null || goal.target === undefined ? "" : String(goal.target),
+          per_income: String(goal.per_income ?? ""),
+          note: goal.note || "",
+        }
+      : EMPTY);
+    setConfirmDelete(false);
+    setBusy(false);
+  }, [open, goal]);
+
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const color = form.color || "violet";
+  const target = form.target === "" ? null : parseAmount(form.target);
+  const perIncome = form.per_income === "" ? 0 : parseAmount(form.per_income);
+  const valid = Boolean(form.title.trim()) && target !== undefined && perIncome !== null
+    && (form.target === "" || target !== null);
+
+  async function save() {
+    if (!valid || busy) return;
+    setBusy(true);
+    const payload = {
+      title: form.title.trim(),
+      emoji: form.emoji,
+      color: form.color,
+      target,
+      per_income: perIncome || 0,
+      note: form.note?.trim() || null,
+    };
+    try {
+      if (editing) await updateGoalSaving(goal.id, payload);
+      else if (!(await createGoalSaving(payload))) return;
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    await deleteGoalSaving(goal.id);
+    onClose();
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose} tall>
+      <div className="px-5 pb-12">
+        <div className="flex items-center justify-between py-3">
+          <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Отмена</button>
+          <div className="text-[15px] font-bold">{editing ? "Цель" : "Новая цель"}</div>
+          <button
+            onClick={save}
+            disabled={!valid || busy}
+            className="press text-[15px] font-bold disabled:opacity-30"
+            style={{ color: hex(color) }}
+          >
+            {editing ? "Сохранить" : "Создать"}
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          <Field label="На что копим">
+            <TextInput
+              value={form.title}
+              onChange={(e) => set({ title: e.target.value })}
+              placeholder="Например, горы зимой"
+              maxLength={60}
+            />
+          </Field>
+
+          <Field label="Сколько нужно" hint="Можно оставить пустым — тогда просто копим без финиша.">
+            <div className="flex items-center gap-2">
+              <TextInput
+                type="text"
+                inputMode="decimal"
+                value={form.target}
+                onChange={(e) => set({ target: cleanAmountInput(e.target.value) })}
+                placeholder="1000"
+                className="flex-1 min-w-0 text-[17px] font-bold"
+              />
+              <span className="text-[16px] font-extrabold text-white/40 shrink-0 w-8 text-center">
+                {currency}
+              </span>
+            </div>
+          </Field>
+
+          <Field label="Откладывать с каждого прихода" hint="Запишется само, как только отметите зарплату.">
+            <div className="flex items-center gap-2">
+              <TextInput
+                type="text"
+                inputMode="decimal"
+                value={form.per_income}
+                onChange={(e) => set({ per_income: cleanAmountInput(e.target.value) })}
+                placeholder="100"
+                className="flex-1 min-w-0 text-[17px] font-bold"
+              />
+              <span className="text-[16px] font-extrabold text-white/40 shrink-0 w-8 text-center">
+                {currency}
+              </span>
+            </div>
+          </Field>
+
+          <Field label="Заметка">
+            <TextInput
+              value={form.note}
+              onChange={(e) => set({ note: e.target.value })}
+              placeholder="Необязательно"
+              maxLength={120}
+            />
+          </Field>
+
+          <Field label="Иконка">
+            <EmojiPicker
+              value={form.emoji}
+              onChange={(emoji) => set({ emoji })}
+              list={["🎯","🏔","✈️","🏖","🚗","🏠","💍","🎓","💻","📷","🎸","🛵","⌚️","🪙","🏦","🎁","🧳","⛷","🏝","🎢"]}
+              colorKey={color}
+              cols={10}
+              size={17}
+              maxHeight={96}
+            />
+          </Field>
+
+          <Field label="Цвет">
+            <div className="flex flex-wrap gap-2.5">
+              {COLOR_KEYS.map((k) => (
+                <button
+                  key={k}
+                  onClick={() => set({ color: k })}
+                  className="w-9 h-9 rounded-full press"
+                  style={{
+                    background: hex(k),
+                    boxShadow: form.color === k ? `0 0 0 2.5px #111116, 0 0 0 4.5px ${hex(k)}` : "none",
+                  }}
+                  aria-label={COLORS[k].label}
+                />
+              ))}
+            </div>
+          </Field>
+
+          <Button onClick={save} disabled={!valid || busy} colorKey={color}>
+            {editing ? "Сохранить" : "Добавить цель"}
+          </Button>
+
+          {editing && (
+            <Button variant="danger" onClick={remove}>
+              {confirmDelete ? "Точно удалить?" : "Удалить цель"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
 /** Одна строка истории: дата, на что, сумма и пометки */
 function OpLine({ op, currency, onClick }) {
   const plus = op.kind === "income" || (op.kind === "adjust" && Number(op.amount) > 0);
   const adjust = op.kind === "adjust";
+  const saving = op.kind === "save";
   const amount = op.kind === "expense" ? withFee(op) : Math.abs(Number(op.amount));
 
   return (
@@ -544,7 +875,7 @@ function OpLine({ op, currency, onClick }) {
     >
       <span className="flex-1 min-w-0">
         <span className="block text-[14.5px] font-semibold truncate">
-          {op.note || (adjust ? "Правка баланса" : plus ? "Приход" : "Трата")}
+          {op.note || (adjust ? "Правка баланса" : saving ? "Отложено" : plus ? "Приход" : "Трата")}
         </span>
         <span className="block text-[12px] text-white/35 truncate">
           {humanDate(op.day)}
@@ -554,9 +885,9 @@ function OpLine({ op, currency, onClick }) {
       </span>
       <span
         className="text-[15px] font-extrabold shrink-0"
-        style={{ color: plus ? hex("mint") : adjust ? hex("amber") : "#fff" }}
+        style={{ color: plus ? hex("mint") : adjust ? hex("amber") : saving ? hex("violet") : "#fff" }}
       >
-        {plus ? "+" : "−"}{moneyExact(amount, currency)}
+        {saving ? "→ " : plus ? "+" : "−"}{moneyExact(amount, currency)}
       </span>
       {onClick && <span className="text-[15px] text-white/20 shrink-0">›</span>}
     </button>
@@ -940,7 +1271,7 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const color = form.color || "mint";
-  const planValue = parseAmount(form.plan);
+  const planValue = form.mode === "free" ? 0 : parseAmount(form.plan);
   const valid = Boolean(form.title.trim()) && planValue !== null && planValue >= 0;
 
   async function save() {
@@ -997,15 +1328,16 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
           </Field>
 
           <Field label="Сколько отводим" hint="Долей от прихода — сумма пересчитается сама. Фиксированной — всегда одна и та же.">
-            <div className="grid grid-cols-2 gap-2 mb-2.5">
+            <div className="grid grid-cols-3 gap-2 mb-2.5">
               {[
-                { v: "percent", t: "Доля от прихода" },
-                { v: "fixed", t: "Фиксированно" },
+                { v: "percent", t: "Доля" },
+                { v: "fixed", t: "Сумма" },
+                { v: "free", t: "Без лимита" },
               ].map((o) => (
                 <button
                   key={o.v}
                   onClick={() => set({ mode: o.v })}
-                  className="press py-3 rounded-2xl text-[13.5px] font-semibold"
+                  className="press py-3 rounded-2xl text-[13px] font-semibold"
                   style={{
                     background: form.mode === o.v ? rgba(color, 0.2) : "rgba(255,255,255,.05)",
                     border: `1px solid ${form.mode === o.v ? rgba(color, 0.4) : "rgba(255,255,255,.08)"}`,
@@ -1015,19 +1347,26 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <TextInput
-                type="text"
-                inputMode="decimal"
-                value={form.plan}
-                onChange={(e) => set({ plan: cleanAmountInput(e.target.value) })}
-                placeholder="0"
-                className="flex-1 min-w-0 text-[17px] font-bold"
-              />
-              <span className="text-[16px] font-extrabold text-white/40 shrink-0 w-8 text-center">
-                {form.mode === "percent" ? "%" : currency}
-              </span>
-            </div>
+            {form.mode === "free" ? (
+              <div className="text-[12.5px] text-white/40 leading-relaxed">
+                Лимита нет — раздел просто показывает, сколько ушло за период.
+                Для здоровья и прочих непредсказуемых трат.
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <TextInput
+                  type="text"
+                  inputMode="decimal"
+                  value={form.plan}
+                  onChange={(e) => set({ plan: cleanAmountInput(e.target.value) })}
+                  placeholder="0"
+                  className="flex-1 min-w-0 text-[17px] font-bold"
+                />
+                <span className="text-[16px] font-extrabold text-white/40 shrink-0 w-8 text-center">
+                  {form.mode === "percent" ? "%" : currency}
+                </span>
+              </div>
+            )}
           </Field>
 
           <div className="rounded-2xl bg-white/5 border border-white/8 px-4 py-3.5 flex items-center justify-between gap-3">
@@ -1102,6 +1441,8 @@ export function MoneyOps({ open, onClose }) {
   const currency = me?.fin_currency || "$";
   const feePercent = Number(me?.fin_fee_percent ?? 1);
   const [editOp, setEditOp] = useState(null);
+  const [goalEditor, setGoalEditor] = useState(null);
+  const [saveTo, setSaveTo] = useState(null);
 
   return (
     <>

@@ -59,6 +59,7 @@ export function StoreProvider({ children }) {
   const [medEvents, setMedEvents] = useState(() => readCache("medEvents", []));
   const [envelopes, setEnvelopes] = useState(() => readCache("envelopes", []));
   const [finOps, setFinOps] = useState(() => readCache("finOps", []));
+  const [finGoals, setFinGoals] = useState(() => readCache("finGoals", []));
   // положение нижнего меню: у каждого телефона свой вырез, подгоняется руками
   const [tabGap, setTabGapState] = useState(() => readCache("tabGap", TAB_GAP_DEFAULT));
   // таблицы, которых нет в базе: миграция ещё не прогнана
@@ -113,11 +114,12 @@ export function StoreProvider({ children }) {
   useEffect(() => writeCache("medEvents", medEvents), [medEvents]);
   useEffect(() => writeCache("envelopes", envelopes), [envelopes]);
   useEffect(() => writeCache("finOps", finOps), [finOps]);
+  useEffect(() => writeCache("finGoals", finGoals), [finGoals]);
 
   // ---------- загрузка ----------
   const loadAll = useCallback(async () => {
     if (!uid) return;
-    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl, wl, md, mt, me, fe, fo] = await Promise.all([
+    const [p, h, c, e, a, pr, fz, w, pu, g, t, pl, wl, md, mt, me, fe, fo, fg] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("habits").select("*").order("position").order("created_at"),
       supabase.from("checkins").select("*"),
@@ -136,6 +138,7 @@ export function StoreProvider({ children }) {
       supabase.from("med_events").select("*").order("date"),
       supabase.from("fin_envelopes").select("*").order("position"),
       supabase.from("fin_ops").select("*").order("day", { ascending: false }),
+      supabase.from("fin_goals").select("*").order("position"),
     ]);
     // при ошибке сети оставляем то, что уже лежит в кэше
     let people = p.error ? null : p.data || [];
@@ -171,6 +174,7 @@ export function StoreProvider({ children }) {
     if (!me.error) setMedEvents(me.data || []);
     if (!fe.error) setEnvelopes(fe.data || []);
     if (!fo.error) setFinOps(fo.data || []);
+    if (!fg.error) setFinGoals(fg.data || []);
 
     // 42P01 = undefined_table: понятная подсказка вместо тихой пустоты
     setMissing(
@@ -223,6 +227,7 @@ export function StoreProvider({ children }) {
         else if (table === "med_events") apply(setMedEvents);
         else if (table === "fin_envelopes") apply(setEnvelopes);
         else if (table === "fin_ops") apply(setFinOps);
+        else if (table === "fin_goals") apply(setFinGoals);
         else if (table === "med_takes") {
           setMedTakes((prev) => {
             const key = (x) => `${x.med_id}|${x.user_id}|${x.day}|${String(x.slot).slice(0, 5)}`;
@@ -1264,6 +1269,72 @@ export function StoreProvider({ children }) {
     [showToast]
   );
 
+  // ---------- цели-накопления ----------
+  const createGoalSaving = useCallback(
+    async (fields) => {
+      if (!uid) return null;
+      const maxPos = finGoals.reduce((m, g) => Math.max(m, g.position || 0), 0);
+      const { data, error } = await supabase
+        .from("fin_goals")
+        .insert({ ...fields, owner_id: uid, position: maxPos + 1 })
+        .select()
+        .single();
+      if (error) {
+        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        return null;
+      }
+      setFinGoals((prev) => (prev.some((g) => g.id === data.id) ? prev : [...prev, data]));
+      return data;
+    },
+    [uid, finGoals, showToast]
+  );
+
+  const updateGoalSaving = useCallback(
+    async (id, patch) => {
+      setFinGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+      const { error } = await supabase.from("fin_goals").update(patch).eq("id", id);
+      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+    },
+    [showToast]
+  );
+
+  const deleteGoalSaving = useCallback(
+    async (id) => {
+      setFinGoals((prev) => prev.filter((g) => g.id !== id));
+      // откладывания оставляем в истории, просто без привязки
+      setFinOps((prev) => prev.map((o) => (o.goal_id === id ? { ...o, goal_id: null } : o)));
+      await supabase.from("fin_goals").delete().eq("id", id);
+      showToast("Цель удалена", "🗑");
+    },
+    [showToast]
+  );
+
+  /**
+   * Приход вместе с автоматическим откладыванием: у каждой цели своя доля
+   * с зарплаты, и записывать её руками каждый раз незачем.
+   */
+  const addIncomeWithSavings = useCallback(
+    async (fields) => {
+      const income = await addFinOp({ ...fields, kind: "income" });
+      if (!income) return null;
+
+      const due = finGoals.filter((g) => !g.archived && Number(g.per_income) > 0);
+      for (const g of due) {
+        await addFinOp({
+          kind: "save",
+          goal_id: g.id,
+          envelope_id: null,
+          amount: Number(g.per_income),
+          note: `С прихода — ${g.title}`,
+          day: fields.day,
+        });
+      }
+      if (due.length) showToast(`Отложено по ${due.length} целям`, "🎯");
+      return income;
+    },
+    [addFinOp, finGoals, showToast]
+  );
+
   // ---------- набор вкладок ----------
   const setTabGap = useCallback((v) => {
     const clamped = Math.max(TAB_GAP_MIN, Math.min(TAB_GAP_MAX, Math.round(v)));
@@ -1278,7 +1349,7 @@ export function StoreProvider({ children }) {
     await supabase.auth.signOut();
     setHabits([]); setCheckins([]); setEvents([]); setAchievements([]); setProfiles([]);
     setFreezes([]); setWishes([]); setPurchases([]); setGoals([]); setTasks([]); setPlaces([]); setWishlist([]);
-    setMeds([]); setMedTakes([]); setMedEvents([]); setEnvelopes([]); setFinOps([]);
+    setMeds([]); setMedTakes([]); setMedEvents([]); setEnvelopes([]); setFinOps([]); setFinGoals([]);
   }, []);
 
   const value = {
@@ -1286,7 +1357,7 @@ export function StoreProvider({ children }) {
     habits, checkins, events, achievements, prefs,
     freezes, wishes, purchases, goals, tasks, places, wishlist, points, photos, freezesLeftFor,
     meds, medTakes, medEvents, takenKeys,
-    envelopes, finOps, tabs, tabGap,
+    envelopes, finOps, finGoals, tabs, tabGap,
     missing,
     loading, online, pendingCount: queue.length, toast,
     isDone, doneSetFor, freezeSetFor, checkinFor,
@@ -1303,6 +1374,7 @@ export function StoreProvider({ children }) {
     createMedEvent, updateMedEvent, toggleMedEvent, deleteMedEvent,
     createEnvelope, updateEnvelope, deleteEnvelope,
     addFinOp, updateFinOp, deleteFinOp, setTabs, setTabGap,
+    createGoalSaving, updateGoalSaving, deleteGoalSaving, addIncomeWithSavings,
     updateProfile, updatePrefs, signOut, reload: loadAll, showToast,
   };
 

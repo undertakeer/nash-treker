@@ -69,6 +69,9 @@ const plusMonth = (iso) => {
 
 const startOfMonth = (iso) => `${iso.slice(0, 7)}-01`;
 
+/** Запас на задержку зарплаты: лучше растянуть остаток, чем остаться без денег */
+export const PERIOD_BUFFER_DAYS = 3;
+
 /**
  * Периоды считаем не по календарю, а от прихода до прихода: зарплата
  * приходит в свой день, и «осталось на день» должно считаться до следующей
@@ -89,8 +92,11 @@ export function periodsOf(ops, today = todayISO()) {
 
   return starts.map((from, i) => ({
     from,
-    // следующий приход закрывает период, иначе считаем месяц вперёд
-    to: i + 1 < starts.length ? addDays(starts[i + 1], -1) : addDays(plusMonth(from), -1),
+    // следующий приход закрывает период; пока его нет — месяц плюс запас на
+    // задержку, чтобы «на день» считалось с небольшим перестрахованием
+    to: i + 1 < starts.length
+      ? addDays(starts[i + 1], -1)
+      : addDays(plusMonth(from), PERIOD_BUFFER_DAYS - 1),
   }));
 }
 
@@ -124,13 +130,23 @@ export function periodPlan(envelopes, ops, period) {
 
   const live = envelopes.filter((e) => !e.archived);
   const rows = live.map((e) => {
-    const allocated = e.mode === "percent"
+    // раздел без лимита ничего не резервирует — он только считает потраченное
+    const free = e.mode === "free";
+    const allocated = free
+      ? 0
+      : e.mode === "percent"
       ? roundAllocation((income * num(e.plan)) / 100)
       : cents(e.plan);
     const spent = mine
       .filter((o) => o.kind === "expense" && o.envelope_id === e.id)
       .reduce((s, o) => s + withFee(o), 0);
-    return { envelope: e, allocated, spent, left: cents(allocated - spent) };
+    return {
+      envelope: e,
+      unlimited: free,
+      allocated,
+      spent,
+      left: free ? null : cents(allocated - spent),
+    };
   });
 
   const allocated = rows.reduce((s, r) => s + r.allocated, 0);
@@ -139,6 +155,8 @@ export function periodPlan(envelopes, ops, period) {
     .filter((o) => o.kind === "expense" && !o.envelope_id)
     .reduce((s, o) => s + withFee(o), 0);
   const fees = mine.reduce((s, o) => s + num(o.fee), 0);
+  // ещё не потраченные лимиты: столько денег должно остаться на кошельке
+  const reserved = rows.reduce((s, r) => s + Math.max(0, r.left ?? 0), 0);
 
   return {
     period,
@@ -148,6 +166,7 @@ export function periodPlan(envelopes, ops, period) {
     looseSpent,
     fees,
     free: cents(income - allocated),
+    reserved: cents(reserved),
     rows: rows.sort((a, b) => (a.envelope.position || 0) - (b.envelope.position || 0)),
   };
 }
@@ -159,10 +178,46 @@ export function periodPlan(envelopes, ops, period) {
  */
 export function walletBalance(ops) {
   return cents(ops.reduce((s, o) => {
-    if (o.kind === "income") return s + num(o.amount);
-    if (o.kind === "adjust") return s + num(o.amount);
+    if (o.kind === "income" || o.kind === "adjust") return s + num(o.amount);
+    // откладывание под цель деньги с кошелька не уносит: они просто помечены
+    if (o.kind !== "expense") return s;
     return hitsWallet(o) ? s - withFee(o) : s;
   }, 0));
+}
+
+/**
+ * Цели-накопления. В отличие от разделов не обнуляются с новой зарплатой:
+ * откладывания копятся, и видно, сколько уже собрано.
+ */
+export function goalsSummary(goals, ops) {
+  const live = goals.filter((g) => !g.archived);
+  const rows = live.map((g) => {
+    const saved = cents(
+      ops.filter((o) => o.kind === "save" && o.goal_id === g.id).reduce((s, o) => s + num(o.amount), 0)
+    );
+    const target = g.target === null || g.target === undefined ? null : cents(g.target);
+    return {
+      goal: g,
+      saved,
+      target,
+      left: target === null ? null : cents(Math.max(0, target - saved)),
+      percent: target ? Math.min(100, Math.round((saved / target) * 100)) : null,
+      done: target !== null && saved >= target,
+    };
+  });
+  return {
+    rows: rows.sort((a, b) => (a.goal.position || 0) - (b.goal.position || 0)),
+    saved: cents(rows.reduce((s, r) => s + r.saved, 0)),
+  };
+}
+
+/**
+ * Сколько с кошелька можно тратить свободно: баланс минус неизрасходованные
+ * лимиты разделов и минус отложенное под цели. Если ушло в минус — денег на
+ * кошельке уже не хватает на то, что расписано.
+ */
+export function spendableNow(balance, reserved, saved) {
+  return cents(num(balance) - num(reserved) - num(saved));
 }
 
 /** Разница между фактическим остатком и посчитанным — для правки баланса */

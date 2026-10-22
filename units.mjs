@@ -216,12 +216,70 @@ check("правка баланса: считаем разницу и не пут
   assert.equal(plan.income, 1000, "правка не попала в приход");
 });
 
-check("период считается от прихода, а не от начала месяца", () => {
+check("период считается от прихода, плюс запас на задержку зарплаты", () => {
   const ops = [inc("2026-09-25", 1600)];
   const p = F.periodFor(ops, "2026-09-26");
   assert.equal(p.from, "2026-09-25");
-  assert.equal(p.to, "2026-10-24", "до дня перед следующей зарплатой");
-  assert.equal(F.daysLeftIn(p, "2026-09-26"), 29, "а не 5 дней до конца месяца");
+  assert.equal(p.to, "2026-10-27", "месяц плюс три дня запаса");
+  assert.equal(F.daysLeftIn(p, "2026-09-26"), 32, "а не 5 дней до конца месяца");
+});
+
+check("раздел без лимита только считает потраченное", () => {
+  const envelopes = [
+    { id: "h", mode: "free", plan: 0, position: 1 },
+    { id: "f", mode: "fixed", plan: 250, position: 2 },
+  ];
+  const ops = [inc("2026-09-25", 1000), exp("2026-09-26", 80, "h"), exp("2026-09-26", 50, "f")];
+  const plan = F.periodPlan(envelopes, ops, F.periodFor(ops, "2026-09-26"));
+  const [free, fixed] = plan.rows;
+  assert.equal(free.unlimited, true);
+  assert.equal(free.spent, 80);
+  assert.equal(free.left, null, "остатка у него нет по смыслу");
+  assert.equal(free.allocated, 0, "и лимит он не резервирует");
+  assert.equal(plan.free, 1000 - 250, "в «не разложено» попал только фиксированный раздел");
+  assert.equal(plan.reserved, 200, "зарезервировано только по разделам с лимитом");
+  assert.equal(fixed.left, 200);
+});
+
+check("свободные деньги: баланс минус лимиты и минус отложенное", () => {
+  assert.equal(F.spendableNow(1000, 300, 200), 500);
+  assert.equal(F.spendableNow(400, 300, 200), -100, "минус значит денег уже не хватает");
+});
+
+check("цели копятся и не обнуляются с новой зарплатой", () => {
+  const goals = [
+    { id: "g1", title: "Горы", target: 500, per_income: 100, position: 1 },
+    { id: "g2", title: "Без суммы", target: null, per_income: 50, position: 2 },
+  ];
+  const save = (goal_id, day, amount) => ({ kind: "save", goal_id, day, amount, fee: 0 });
+  const ops = [
+    inc("2026-09-25", 1000), save("g1", "2026-09-25", 100),
+    inc("2026-10-25", 1000), save("g1", "2026-10-25", 100), save("g2", "2026-10-25", 50),
+  ];
+  const sum = F.goalsSummary(goals, ops);
+  assert.equal(sum.rows[0].saved, 200, "две зарплаты подряд, период не сбросил");
+  assert.equal(sum.rows[0].left, 300);
+  assert.equal(sum.rows[0].percent, 40);
+  assert.equal(sum.rows[0].done, false);
+  assert.equal(sum.rows[1].target, null);
+  assert.equal(sum.rows[1].percent, null, "без цели процента нет");
+  assert.equal(sum.saved, 250, "всего отложено");
+});
+
+check("цель считается достигнутой и не уходит выше 100%", () => {
+  const goals = [{ id: "g1", target: 100, per_income: 0, position: 1 }];
+  const ops = [{ kind: "save", goal_id: "g1", day: "2026-09-25", amount: 140, fee: 0 }];
+  const r = F.goalsSummary(goals, ops).rows[0];
+  assert.equal(r.done, true);
+  assert.equal(r.percent, 100);
+  assert.equal(r.left, 0, "ниже нуля не уходим");
+});
+
+check("откладывание не трогает кошелёк", () => {
+  const ops = [inc("2026-09-25", 1000), { kind: "save", goal_id: "g1", day: "2026-09-25", amount: 100, fee: 0 }];
+  assert.equal(F.walletBalance(ops), 1000, "деньги лежат там же, просто помечены");
+  assert.equal(F.periodPlan([], ops, F.periodFor(ops, "2026-09-26")).income, 1000,
+    "и приходом откладывание не считается");
 });
 
 check("следующий приход закрывает прошлый период", () => {
