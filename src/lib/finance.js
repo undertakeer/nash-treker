@@ -78,26 +78,57 @@ export const PERIOD_BUFFER_DAYS = 3;
  * зарплаты, а не до 31-го числа.
  */
 export function periodsOf(ops, today = todayISO()) {
-  const incomes = ops
-    .filter((o) => o.kind === "income")
-    .map((o) => o.day)
-    .sort();
-  const starts = [...new Set(incomes)];
+  const incomes = ops.filter((o) => o.kind === "income");
+
+  // если зарплат за день несколько, период открывает самая ранняя
+  const byDay = new Map();
+  for (const o of incomes) {
+    const prev = byDay.get(o.day);
+    if (!prev || atOf(o) < atOf(prev)) byDay.set(o.day, o);
+  }
+  const starts = [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 
   if (!starts.length) {
     // прихода ещё не было — показываем текущий календарный месяц
     const from = startOfMonth(today);
-    return [{ from, to: addDays(plusMonth(from), -1) }];
+    return [{ from, fromAt: null, incomeId: null, first: true, to: addDays(plusMonth(from), -1) }];
   }
 
-  return starts.map((from, i) => ({
-    from,
-    // следующий приход закрывает период; пока его нет — месяц плюс запас на
-    // задержку, чтобы «на день» считалось с небольшим перестрахованием
-    to: i + 1 < starts.length
-      ? addDays(starts[i + 1], -1)
-      : addDays(plusMonth(from), PERIOD_BUFFER_DAYS - 1),
-  }));
+  return starts.map((o, i) => {
+    const next = starts[i + 1];
+    return {
+      from: o.day,
+      fromAt: o.created_at ?? null,
+      incomeId: o.id ?? null,
+      first: i === 0,
+      // следующий приход закрывает период; пока его нет — месяц плюс запас на
+      // задержку, чтобы «на день» считалось с небольшим перестрахованием
+      to: next ? addDays(next.day, -1) : addDays(plusMonth(o.day), PERIOD_BUFFER_DAYS - 1),
+      nextFrom: next ? next.day : null,
+      nextAt: next ? next.created_at ?? null : null,
+      nextIncomeId: next ? next.id ?? null : null,
+    };
+  });
+}
+
+const atOf = (op) => {
+  const t = Date.parse(op?.created_at || "");
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+};
+
+/**
+ * Записана ли операция уже после начала периода. В один день зарплата может
+ * прийти вечером, а трата случиться утром — такая трата относится к старому
+ * периоду и свежий лимит есть не должна.
+ */
+function startedAfter(op, from, fromAt, incomeId) {
+  if (op.day !== from) return op.day > from;
+  if (incomeId && op.id === incomeId) return true;
+  const a = Date.parse(op.created_at || "");
+  const b = Date.parse(fromAt || "");
+  // без времени записи судить не о чем — считаем по старому, по дате
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return true;
+  return a >= b;
 }
 
 /** Период, в который попадает день (последний начавшийся до него) */
@@ -107,22 +138,24 @@ export function periodFor(ops, day = todayISO()) {
   return started.length ? started[started.length - 1] : list[0];
 }
 
-export function periodLabel(period, today = todayISO()) {
+export function periodLabel(period) {
   const months = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
   const fmt = (iso) => {
     const d = fromISO(iso);
     return `${d.getDate()} ${months[d.getMonth()]}`;
   };
-  const current = period.from <= today && today <= period.to;
-  return `${fmt(period.from)} — ${fmt(period.to)}${current ? "" : ""}`;
+  return `${fmt(period.from)} — ${fmt(period.to)}`;
 }
 
-const inPeriod = (op, period) => op.day >= period.from && op.day <= period.to;
+function inPeriod(op, period) {
+  const started = startedAfter(op, period.from, period.fromAt, period.incomeId);
+  // самый первый период забирает и всё, что было до него: иначе старые
+  // записи просто пропали бы из всех экранов
+  if (!started) return Boolean(period.first);
+  if (!period.nextFrom) return true;
+  return !startedAfter(op, period.nextFrom, period.nextAt, period.nextIncomeId);
+}
 
-/**
- * Раскладка периода: сколько пришло, сколько отведено каждому разделу,
- * сколько из него снято (вместе с комиссией) и сколько осталось.
- */
 export function periodPlan(envelopes, ops, period) {
   const mine = ops.filter((o) => inPeriod(o, period));
   const income = mine.filter((o) => o.kind === "income").reduce((s, o) => s + num(o.amount), 0);

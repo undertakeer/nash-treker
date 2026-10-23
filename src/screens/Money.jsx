@@ -157,7 +157,7 @@ export default function Money({ onOpenOps }) {
           ‹
         </button>
         <div className="text-center">
-          <div className="text-[14px] font-bold">{periodLabel(period, today)}</div>
+          <div className="text-[14px] font-bold">{periodLabel(period)}</div>
           {daysLeft !== null && (
             <div className="text-[11.5px] text-white/35">осталось {daysLeft} дн. до следующего прихода</div>
           )}

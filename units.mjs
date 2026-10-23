@@ -150,8 +150,9 @@ check("dayPartOf: раскладка по частям дня", () => {
 
 // ---------- деньги ----------
 const F = M.fin;
-const inc = (day, amount) => ({ kind: "income", day, amount });
-const exp = (day, amount, envelope_id = null, fee = 0) => ({ kind: "expense", day, amount, envelope_id, fee });
+const inc = (day, amount, created_at, id) => ({ kind: "income", day, amount, created_at, id });
+const exp = (day, amount, envelope_id = null, fee = 0, created_at) =>
+  ({ kind: "expense", day, amount, envelope_id, fee, created_at });
 
 check("округление: доля вверх до десятков, остальное вниз до доллара", () => {
   assert.equal(F.roundAllocation(546.6), 550);
@@ -282,8 +283,47 @@ check("откладывание не трогает кошелёк", () => {
     "и приходом откладывание не считается");
 });
 
+check("утренняя трата не съедает лимит вечерней зарплаты", () => {
+  const envelopes = [{ id: "f", mode: "fixed", plan: 250, position: 1 }];
+  const ops = [
+    inc("2026-09-25", 1000, "2026-09-25T10:00:00Z", "i1"),
+    exp("2026-10-23", 20, "f", 0, "2026-10-23T08:00:00Z"),   // утром, из старых денег
+    inc("2026-10-23", 1000, "2026-10-23T20:00:00Z", "i2"),   // вечером зарплата
+    exp("2026-10-23", 30, "f", 0, "2026-10-23T21:00:00Z"),   // вечером, уже из новых
+  ];
+  const periods = F.periodsOf(ops, "2026-10-23");
+  const fresh = F.periodPlan(envelopes, ops, periods[1]);
+  assert.equal(fresh.rows[0].spent, 30, "в новом периоде только вечерняя трата");
+  assert.equal(fresh.rows[0].left, 220);
+  assert.equal(fresh.income, 1000, "и ровно одна зарплата");
+
+  const old = F.periodPlan(envelopes, ops, periods[0]);
+  assert.equal(old.rows[0].spent, 20, "утренние 20 остались в старом периоде, не пропали");
+});
+
+check("без времени записи судим по дате, как раньше", () => {
+  const envelopes = [{ id: "f", mode: "fixed", plan: 250, position: 1 }];
+  const ops = [
+    { kind: "expense", day: "2026-10-23", amount: 20, envelope_id: "f", fee: 0 },
+    { kind: "income", day: "2026-10-23", amount: 1000, id: "i1" },
+  ];
+  const plan = F.periodPlan(envelopes, ops, F.periodFor(ops, "2026-10-23"));
+  assert.equal(plan.rows[0].spent, 20);
+});
+
+check("самый первый период забирает всё, что было до него", () => {
+  const envelopes = [{ id: "f", mode: "fixed", plan: 250, position: 1 }];
+  const ops = [
+    exp("2026-09-01", 15, "f", 0, "2026-09-01T09:00:00Z"),
+    inc("2026-09-25", 1000, "2026-09-25T10:00:00Z", "i1"),
+  ];
+  const plan = F.periodPlan(envelopes, ops, F.periodsOf(ops, "2026-09-26")[0]);
+  assert.equal(plan.rows[0].spent, 15, "иначе запись пропала бы со всех экранов");
+});
+
 check("следующий приход закрывает прошлый период", () => {
-  const ops = [inc("2026-09-25", 1600), inc("2026-10-20", 1600)];
+  const ops = [inc("2026-09-25", 1600, "2026-09-25T10:00:00Z", "i1"),
+               inc("2026-10-20", 1600, "2026-10-20T10:00:00Z", "i2")];
   const [first, second] = F.periodsOf(ops, "2026-10-21");
   assert.equal(first.to, "2026-10-19");
   assert.equal(second.from, "2026-10-20");
