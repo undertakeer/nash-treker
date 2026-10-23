@@ -48,7 +48,7 @@ export default function Money({ onOpenOps }) {
     () => goalsSummary(finGoals, finOps, period, plan.income),
     [finGoals, finOps, period, plan.income]
   );
-  const spendable = spendableNow(balance, plan.reserved, goals.earmarked);
+  const spendable = spendableNow(balance, plan.reserved, goals.earmarked, goals.pending);
 
   // без лимита разделу нечего исчерпывать — он всегда на виду
   const openRows = plan.rows.filter((r) => r.unlimited || r.left > 0);
@@ -117,7 +117,7 @@ export default function Money({ onOpenOps }) {
       </div>
 
       {/* сколько из баланса уже расписано */}
-      {(plan.reserved > 0 || goals.earmarked > 0) && (
+      {(plan.reserved > 0 || goals.earmarked > 0 || goals.pending > 0) && (
         <div className="rounded-2xl bg-white/5 border border-white/8 px-4 py-3 mb-3 space-y-1.5">
           <div className="flex items-center justify-between text-[13px]">
             <span className="text-white/45">Осталось по разделам</span>
@@ -127,6 +127,12 @@ export default function Money({ onOpenOps }) {
             <div className="flex items-center justify-between text-[13px]">
               <span className="text-white/45">Отложено с кошелька</span>
               <span className="font-bold">{money(goals.earmarked, currency)}</span>
+            </div>
+          )}
+          {goals.pending > 0 && (
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-white/45">Ещё отложить в копилки</span>
+              <span className="font-bold">{money(goals.pending, currency)}</span>
             </div>
           )}
           <div className="flex items-center justify-between pt-1.5 border-t border-white/6">

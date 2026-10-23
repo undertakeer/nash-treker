@@ -271,12 +271,13 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
 }
 
 /**
- * Сколько с кошелька можно тратить свободно: баланс минус неизрасходованные
- * лимиты разделов и минус отложенное под цели. Если ушло в минус — денег на
- * кошельке уже не хватает на то, что расписано.
+ * Сколько с кошелька можно тратить свободно. Вычитаем всё, что уже обещано:
+ * неизрасходованные лимиты разделов, отложенное под копилки и взносы, которые
+ * в этом периоде ещё предстоит сделать. Минус означает, что на кошельке уже
+ * не хватает на расписанное.
  */
-export function spendableNow(balance, reserved, earmarked) {
-  return cents(num(balance) - num(reserved) - num(earmarked));
+export function spendableNow(balance, reserved, earmarked, pending = 0) {
+  return cents(num(balance) - num(reserved) - num(earmarked) - num(pending));
 }
 
 /** Разница между фактическим остатком и посчитанным — для правки баланса */
