@@ -222,13 +222,24 @@ export function walletBalance(ops) {
  * Цели-накопления. В отличие от разделов не обнуляются с новой зарплатой:
  * откладывания копятся, и видно, сколько уже собрано.
  */
-export function goalsSummary(goals, ops) {
+export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
   const live = goals.filter((g) => !g.archived);
+  const mine = period ? ops.filter((o) => inPeriod(o, period)) : [];
+
   const rows = live.map((g) => {
     const saved = cents(
       ops.filter((o) => o.kind === "save" && o.goal_id === g.id).reduce((s, o) => s + num(o.amount), 0)
     );
     const target = g.target === null || g.target === undefined ? null : cents(g.target);
+
+    // сколько полагается внести в этом периоде и сколько уже внесено
+    const due = g.per_mode === "percent"
+      ? roundAllocation((num(periodIncome) * num(g.per_income)) / 100)
+      : cents(g.per_income);
+    const paid = cents(
+      mine.filter((o) => o.kind === "save" && o.goal_id === g.id).reduce((s, o) => s + num(o.amount), 0)
+    );
+
     return {
       goal: g,
       saved,
@@ -236,11 +247,18 @@ export function goalsSummary(goals, ops) {
       left: target === null ? null : cents(Math.max(0, target - saved)),
       percent: target ? Math.min(100, Math.round((saved / target) * 100)) : null,
       done: target !== null && saved >= target,
+      due,
+      paid,
+      pending: cents(Math.max(0, due - paid)),
+      // взнос за период закрыт: либо внесли сколько надо, либо вносить нечего
+      settled: due <= 0 || paid >= due,
     };
   });
+
   return {
     rows: rows.sort((a, b) => (a.goal.position || 0) - (b.goal.position || 0)),
     saved: cents(rows.reduce((s, r) => s + r.saved, 0)),
+    pending: cents(rows.reduce((s, r) => s + r.pending, 0)),
   };
 }
 

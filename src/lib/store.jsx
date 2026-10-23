@@ -7,6 +7,7 @@ import { todayISO } from "./date";
 import { emailToLogin } from "./auth";
 import { pathFromPublicUrl, photoVariants } from "./image";
 import { freezesLeftInWeek, streak } from "./stats";
+import { roundAllocation } from "./finance";
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -1319,17 +1320,24 @@ export function StoreProvider({ children }) {
       if (!income) return null;
 
       const due = finGoals.filter((g) => !g.archived && Number(g.per_income) > 0);
+      let done = 0;
       for (const g of due) {
+        // доля считается от этого прихода и округляется так же, как лимиты
+        const amount = g.per_mode === "percent"
+          ? roundAllocation((Number(fields.amount) * Number(g.per_income)) / 100)
+          : Number(g.per_income);
+        if (amount <= 0) continue;
         await addFinOp({
           kind: "save",
           goal_id: g.id,
           envelope_id: null,
-          amount: Number(g.per_income),
+          amount,
           note: `С прихода — ${g.title}`,
           day: fields.day,
         });
+        done++;
       }
-      if (due.length) showToast(`Отложено по ${due.length} целям`, "🎯");
+      if (done) showToast(`Отложено по ${done} ${done === 1 ? "копилке" : "копилкам"}`, "🎯");
       return income;
     },
     [addFinOp, finGoals, showToast]

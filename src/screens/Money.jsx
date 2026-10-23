@@ -44,7 +44,10 @@ export default function Money({ onOpenOps }) {
   const daysLeft = daysLeftIn(period, today);
 
   // израсходованные разделы уезжают в отдельную шторку, чтобы не мешали
-  const goals = useMemo(() => goalsSummary(finGoals, finOps), [finGoals, finOps]);
+  const goals = useMemo(
+    () => goalsSummary(finGoals, finOps, period, plan.income),
+    [finGoals, finOps, period, plan.income]
+  );
   const spendable = spendableNow(balance, plan.reserved, goals.saved);
 
   // без лимита разделу нечего исчерпывать — он всегда на виду
@@ -271,7 +274,7 @@ export default function Money({ onOpenOps }) {
                   key={row.goal.id}
                   row={row}
                   currency={currency}
-                  onSave={() => setSaveTo(row.goal)}
+                  onSave={() => setSaveTo({ ...row.goal, pending: row.pending })}
                   onEdit={() => setGoalEditor({ goal: row.goal })}
                 />
               ))}
@@ -290,6 +293,7 @@ export default function Money({ onOpenOps }) {
       <AmountSheet
         open={Boolean(saveTo)}
         title={saveTo ? `${saveTo.emoji} ${saveTo.title}` : ""}
+        defaultAmount={saveTo?.pending ? String(saveTo.pending) : ""}
         hint="Деньги остаются на кошельке, просто помечены под цель."
         actionLabel="Отложить"
         colorKey={saveTo?.color || "violet"}
@@ -467,7 +471,7 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
 
 function AmountSheet({
   open, title, hint, actionLabel, colorKey, currency, onClose, onSubmit,
-  withDate = false, withOptions = false, today, feePercent = 0,
+  withDate = false, withOptions = false, today, feePercent = 0, defaultAmount = "",
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -478,10 +482,11 @@ function AmountSheet({
 
   useEffect(() => {
     if (!open) return;
+    setAmount(defaultAmount);
     setDay(today);
     setTakeFee(true);
     setOffWallet(false);
-  }, [open, today]);
+  }, [open, today, defaultAmount]);
 
   const value = parseAmount(amount);
   const valid = value !== null && value > 0;
@@ -642,7 +647,7 @@ function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
 
 /** Цель-накопление: сколько собрано и сколько осталось до суммы */
 function GoalRow({ row, currency, onSave, onEdit }) {
-  const { goal: g, saved, target, left, percent, done } = row;
+  const { goal: g, saved, target, left, percent, done, due, paid, pending, settled } = row;
   const color = g.color || "violet";
 
   return (
@@ -669,7 +674,11 @@ function GoalRow({ row, currency, onSave, onEdit }) {
             </div>
             <div className="text-[12.5px] text-white/45">
               {target !== null ? `цель ${money(target, currency)}` : "без конкретной суммы"}
-              {Number(g.per_income) > 0 ? ` · ${money(g.per_income, currency)} с прихода` : ""}
+              {Number(g.per_income) > 0
+                ? g.per_mode === "percent"
+                  ? ` · ${Number(g.per_income)}% с прихода`
+                  : ` · ${money(g.per_income, currency)} с прихода`
+                : ""}
             </div>
           </div>
           <div className="text-right shrink-0">
@@ -694,6 +703,25 @@ function GoalRow({ row, currency, onSave, onEdit }) {
               Отложить
             </button>
           </div>
+
+          {due > 0 && (
+            <div
+              className="mt-2.5 px-3 py-2 rounded-xl text-[12.5px] font-semibold flex items-center gap-2"
+              style={{
+                background: settled ? rgba("mint", 0.14) : rgba("amber", 0.14),
+                color: settled ? hex("mint") : hex("amber"),
+              }}
+            >
+              {settled ? (
+                <>✅ В этом периоде внесено {money(paid, currency)}</>
+              ) : (
+                <>
+                  ⏳ Надо внести {money(pending, currency)}
+                  {paid > 0 ? ` · уже внесено ${money(paid, currency)} из ${money(due, currency)}` : ""}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -703,7 +731,10 @@ function GoalRow({ row, currency, onSave, onEdit }) {
 /** Настройка цели: сумма и сколько уходит туда с каждой зарплаты */
 function GoalEditor({ open, goal, currency, today, onClose }) {
   const { createGoalSaving, updateGoalSaving, deleteGoalSaving, addFinOp } = useStore();
-  const EMPTY = { title: "", emoji: "🎯", color: "violet", target: "", per_income: "", note: "", already: "" };
+  const EMPTY = {
+    title: "", emoji: "🎯", color: "violet", target: "",
+    per_mode: "fixed", per_income: "", note: "", already: "",
+  };
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -738,6 +769,7 @@ function GoalEditor({ open, goal, currency, today, onClose }) {
       emoji: form.emoji,
       color: form.color,
       target,
+      per_mode: form.per_mode,
       per_income: perIncome || 0,
       note: form.note?.trim() || null,
     };
@@ -829,18 +861,39 @@ function GoalEditor({ open, goal, currency, today, onClose }) {
             </Field>
           )}
 
-          <Field label="Откладывать с каждого прихода" hint="Запишется само, как только отметите зарплату.">
+          <Field
+            label="Откладывать с каждого прихода"
+            hint="Запишется само, как только отметите зарплату. Доля считается от суммы этого прихода."
+          >
+            <div className="grid grid-cols-2 gap-2 mb-2.5">
+              {[
+                { v: "fixed", t: "Суммой" },
+                { v: "percent", t: "Долей" },
+              ].map((o) => (
+                <button
+                  key={o.v}
+                  onClick={() => set({ per_mode: o.v })}
+                  className="press py-3 rounded-2xl text-[13.5px] font-semibold"
+                  style={{
+                    background: form.per_mode === o.v ? rgba(color, 0.2) : "rgba(255,255,255,.05)",
+                    border: `1px solid ${form.per_mode === o.v ? rgba(color, 0.4) : "rgba(255,255,255,.08)"}`,
+                  }}
+                >
+                  {o.t}
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-2">
               <TextInput
                 type="text"
                 inputMode="decimal"
                 value={form.per_income}
                 onChange={(e) => set({ per_income: cleanAmountInput(e.target.value) })}
-                placeholder="100"
+                placeholder={form.per_mode === "percent" ? "30" : "550"}
                 className="flex-1 min-w-0 text-[17px] font-bold"
               />
               <span className="text-[16px] font-extrabold text-white/40 shrink-0 w-8 text-center">
-                {currency}
+                {form.per_mode === "percent" ? "%" : currency}
               </span>
             </div>
           </Field>

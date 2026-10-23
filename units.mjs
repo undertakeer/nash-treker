@@ -267,6 +267,50 @@ check("цели копятся и не обнуляются с новой зар
   assert.equal(sum.saved, 250, "всего отложено");
 });
 
+check("взнос копилки долей от прихода", () => {
+  const goals = [{ id: "g1", target: 4000, per_mode: "percent", per_income: 30, position: 1 }];
+  const ops = [inc("2026-10-22", 1822, "2026-10-22T10:00:00Z", "i1")];
+  const period = F.periodFor(ops, "2026-10-23");
+  let sum = F.goalsSummary(goals, ops, period, 1822);
+  assert.equal(sum.rows[0].due, 550, "30% от 1822 округлено вверх до десятков");
+  assert.equal(sum.rows[0].paid, 0);
+  assert.equal(sum.rows[0].pending, 550);
+  assert.equal(sum.rows[0].settled, false, "ещё не внесено");
+
+  const paid = [...ops, { kind: "save", goal_id: "g1", day: "2026-10-23", amount: 550, fee: 0, created_at: "2026-10-23T09:00:00Z" }];
+  sum = F.goalsSummary(goals, paid, F.periodFor(paid, "2026-10-23"), 1822);
+  assert.equal(sum.rows[0].paid, 550);
+  assert.equal(sum.rows[0].pending, 0);
+  assert.equal(sum.rows[0].settled, true, "взнос за период закрыт");
+  assert.equal(sum.rows[0].saved, 550);
+});
+
+check("взнос фиксированной суммой и частичный взнос", () => {
+  const goals = [{ id: "g1", target: null, per_mode: "fixed", per_income: 550, position: 1 }];
+  const ops = [
+    inc("2026-10-22", 1000, "2026-10-22T10:00:00Z", "i1"),
+    { kind: "save", goal_id: "g1", day: "2026-10-23", amount: 200, fee: 0, created_at: "2026-10-23T09:00:00Z" },
+  ];
+  const r = F.goalsSummary(goals, ops, F.periodFor(ops, "2026-10-23"), 1000).rows[0];
+  assert.equal(r.due, 550);
+  assert.equal(r.paid, 200);
+  assert.equal(r.pending, 350, "осталось донести");
+  assert.equal(r.settled, false);
+});
+
+check("взносы прошлого периода не засчитываются в текущий", () => {
+  const goals = [{ id: "g1", target: null, per_mode: "fixed", per_income: 550, position: 1 }];
+  const ops = [
+    inc("2026-09-22", 1000, "2026-09-22T10:00:00Z", "i1"),
+    { kind: "save", goal_id: "g1", day: "2026-09-22", amount: 550, fee: 0, created_at: "2026-09-22T11:00:00Z" },
+    inc("2026-10-22", 1000, "2026-10-22T10:00:00Z", "i2"),
+  ];
+  const r = F.goalsSummary(goals, ops, F.periodFor(ops, "2026-10-23"), 1000).rows[0];
+  assert.equal(r.saved, 550, "накопленное считается за всё время");
+  assert.equal(r.paid, 0, "а взнос за этот период ещё не сделан");
+  assert.equal(r.pending, 550);
+});
+
 check("цель считается достигнутой и не уходит выше 100%", () => {
   const goals = [{ id: "g1", target: 100, per_income: 0, position: 1 }];
   const ops = [{ kind: "save", goal_id: "g1", day: "2026-09-25", amount: 140, fee: 0 }];

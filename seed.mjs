@@ -74,8 +74,8 @@ export function authSeed() {
     { id: "fo7", owner_id: uid, envelope_id: null, goal_id: "g2", kind: "save", amount: 50, note: "С прихода — Подушка", day: salaryDay, fee: 0, created_at: new Date().toISOString() },
   ]);
   put("finGoals", [
-    { id: "g1", owner_id: uid, title: "Горы зимой", emoji: "🏔", color: "violet", target: 1000, per_income: 100, position: 1, archived: false, created_at: new Date().toISOString() },
-    { id: "g2", owner_id: uid, title: "Подушка", emoji: "🪙", color: "sky", target: null, per_income: 50, position: 2, archived: false, created_at: new Date().toISOString() },
+    { id: "g1", owner_id: uid, title: "Копилка", emoji: "🏔", color: "violet", target: 4000, per_mode: "percent", per_income: 30, position: 1, archived: false, created_at: new Date().toISOString() },
+    { id: "g2", owner_id: uid, title: "Подушка", emoji: "🪙", color: "sky", target: null, per_mode: "fixed", per_income: 550, position: 2, archived: false, created_at: new Date().toISOString() },
   ]);
   put("tasks", [
     { id: "t1", title: "Купить корм коту", emoji: "🛒", color: "sky", done: false, due_date: today, due_time: "18:00", assignee_id: null, priority: 1, position: 0, created_at: new Date().toISOString() },
