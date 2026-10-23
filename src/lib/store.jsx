@@ -179,7 +179,7 @@ export function StoreProvider({ children }) {
     // 42P01 = undefined_table: понятная подсказка вместо тихой пустоты
     setMissing(
       [["tasks", t], ["places", pl], ["wishlist", wl], ["meds", md], ["meds", mt], ["meds", me],
-         ["fin_envelopes", fe], ["fin_envelopes", fo]]
+         ["fin_envelopes", fe], ["fin_envelopes", fo], ["fin_goals", fg]]
         .filter(([, res]) => res.error?.code === "42P01")
         .map(([name]) => name)
     );
