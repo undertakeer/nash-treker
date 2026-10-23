@@ -267,6 +267,50 @@ check("цели копятся и не обнуляются с новой зар
   assert.equal(sum.saved, 250, "всего отложено");
 });
 
+check("уже накопленное не взнос и не резерв на кошельке", () => {
+  const goals = [{ id: "g1", target: 4000, per_mode: "percent", per_income: 30, opening: 1040, position: 1 }];
+  const ops = [inc("2026-10-22", 1822, "2026-10-22T10:00:00Z", "i1")];
+  const period = F.periodFor(ops, "2026-10-24");
+  const sum = F.goalsSummary(goals, ops, period, 1822);
+  const r = sum.rows[0];
+
+  assert.equal(r.opening, 1040);
+  assert.equal(r.saved, 1040, "в прогресс входит");
+  assert.equal(r.earmarked, 0, "но с кошелька ничего не отложено");
+  assert.equal(r.paid, 0, "и взносом за период это не считается");
+  assert.equal(r.pending, 550, "взнос за период всё ещё нужен");
+  assert.equal(r.settled, false);
+  assert.equal(sum.earmarked, 0);
+  assert.equal(sum.saved, 1040);
+
+  // именно это и загоняло баланс в минус
+  assert.equal(F.spendableNow(1451, 1206, sum.earmarked), 245, "а не минус");
+});
+
+check("отложенное с кошелька складывается с прежними накоплениями", () => {
+  const goals = [{ id: "g1", target: 4000, per_mode: "fixed", per_income: 550, opening: 1040, position: 1 }];
+  const ops = [
+    inc("2026-10-22", 1822, "2026-10-22T10:00:00Z", "i1"),
+    { kind: "save", goal_id: "g1", day: "2026-10-24", amount: 550, fee: 0, created_at: "2026-10-24T09:00:00Z" },
+  ];
+  const r = F.goalsSummary(goals, ops, F.periodFor(ops, "2026-10-24"), 1822).rows[0];
+  assert.equal(r.opening, 1040);
+  assert.equal(r.earmarked, 550, "вот это уже лежит на кошельке под целью");
+  assert.equal(r.saved, 1590);
+  assert.equal(r.paid, 550);
+  assert.equal(r.settled, true);
+  assert.equal(r.percent, Math.round((1590 / 4000) * 100));
+});
+
+check("копилка без прежних накоплений работает как раньше", () => {
+  const goals = [{ id: "g1", target: 500, per_mode: "fixed", per_income: 0, position: 1 }];
+  const ops = [{ kind: "save", goal_id: "g1", day: "2026-09-25", amount: 140, fee: 0 }];
+  const r = F.goalsSummary(goals, ops).rows[0];
+  assert.equal(r.opening, 0, "поля может не быть вовсе");
+  assert.equal(r.saved, 140);
+  assert.equal(r.earmarked, 140);
+});
+
 check("взнос копилки долей от прихода", () => {
   const goals = [{ id: "g1", target: 4000, per_mode: "percent", per_income: 30, position: 1 }];
   const ops = [inc("2026-10-22", 1822, "2026-10-22T10:00:00Z", "i1")];

@@ -48,7 +48,7 @@ export default function Money({ onOpenOps }) {
     () => goalsSummary(finGoals, finOps, period, plan.income),
     [finGoals, finOps, period, plan.income]
   );
-  const spendable = spendableNow(balance, plan.reserved, goals.saved);
+  const spendable = spendableNow(balance, plan.reserved, goals.earmarked);
 
   // без лимита разделу нечего исчерпывать — он всегда на виду
   const openRows = plan.rows.filter((r) => r.unlimited || r.left > 0);
@@ -117,16 +117,16 @@ export default function Money({ onOpenOps }) {
       </div>
 
       {/* сколько из баланса уже расписано */}
-      {(plan.reserved > 0 || goals.saved > 0) && (
+      {(plan.reserved > 0 || goals.earmarked > 0) && (
         <div className="rounded-2xl bg-white/5 border border-white/8 px-4 py-3 mb-3 space-y-1.5">
           <div className="flex items-center justify-between text-[13px]">
             <span className="text-white/45">Осталось по разделам</span>
             <span className="font-bold">{money(plan.reserved, currency)}</span>
           </div>
-          {goals.saved > 0 && (
+          {goals.earmarked > 0 && (
             <div className="flex items-center justify-between text-[13px]">
-              <span className="text-white/45">Отложено в целях</span>
-              <span className="font-bold">{money(goals.saved, currency)}</span>
+              <span className="text-white/45">Отложено с кошелька</span>
+              <span className="font-bold">{money(goals.earmarked, currency)}</span>
             </div>
           )}
           <div className="flex items-center justify-between pt-1.5 border-t border-white/6">
@@ -286,7 +286,6 @@ export default function Money({ onOpenOps }) {
         open={Boolean(goalEditor)}
         goal={goalEditor?.goal || null}
         currency={currency}
-        today={today}
         onClose={() => setGoalEditor(null)}
       />
 
@@ -647,7 +646,7 @@ function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
 
 /** Цель-накопление: сколько собрано и сколько осталось до суммы */
 function GoalRow({ row, currency, onSave, onEdit }) {
-  const { goal: g, saved, target, left, percent, done, due, paid, pending, settled } = row;
+  const { goal: g, saved, opening, target, left, percent, done, due, paid, pending, settled } = row;
   const color = g.color || "violet";
 
   return (
@@ -685,7 +684,9 @@ function GoalRow({ row, currency, onSave, onEdit }) {
             <div className="text-[19px] font-extrabold leading-none" style={{ color: hex(color) }}>
               {money(saved, currency)}
             </div>
-            <div className="text-[11px] text-white/35 mt-1">отложено</div>
+            <div className="text-[11px] text-white/35 mt-1">
+              {opening > 0 && opening === saved ? "было до учёта" : "накоплено"}
+            </div>
           </div>
         </div>
 
@@ -729,8 +730,8 @@ function GoalRow({ row, currency, onSave, onEdit }) {
 }
 
 /** Настройка цели: сумма и сколько уходит туда с каждой зарплаты */
-function GoalEditor({ open, goal, currency, today, onClose }) {
-  const { createGoalSaving, updateGoalSaving, deleteGoalSaving, addFinOp } = useStore();
+function GoalEditor({ open, goal, currency, onClose }) {
+  const { createGoalSaving, updateGoalSaving, deleteGoalSaving } = useStore();
   const EMPTY = {
     title: "", emoji: "🎯", color: "violet", target: "",
     per_mode: "fixed", per_income: "", note: "", already: "",
@@ -747,6 +748,7 @@ function GoalEditor({ open, goal, currency, today, onClose }) {
           ...goal,
           target: goal.target === null || goal.target === undefined ? "" : String(goal.target),
           per_income: String(goal.per_income ?? ""),
+          already: Number(goal.opening) ? String(goal.opening) : "",
           note: goal.note || "",
         }
       : EMPTY);
@@ -771,24 +773,13 @@ function GoalEditor({ open, goal, currency, today, onClose }) {
       target,
       per_mode: form.per_mode,
       per_income: perIncome || 0,
+      // отдельным полем, а не операцией: это не взнос и не деньги с кошелька
+      opening: parseAmount(form.already) || 0,
       note: form.note?.trim() || null,
     };
     try {
-      if (editing) {
-        await updateGoalSaving(goal.id, payload);
-      } else {
-        const made = await createGoalSaving(payload);
-        if (!made) return;
-        // то, что уже лежит в копилке, записываем первой операцией —
-        // дальше всё считается из них одинаково
-        const start = parseAmount(form.already);
-        if (start) {
-          await addFinOp({
-            kind: "save", goal_id: made.id, envelope_id: null,
-            amount: start, note: "Уже накоплено", day: today,
-          });
-        }
-      }
+      if (editing) await updateGoalSaving(goal.id, payload);
+      else if (!(await createGoalSaving(payload))) return;
       onClose();
     } finally {
       setBusy(false);
@@ -843,23 +834,24 @@ function GoalEditor({ open, goal, currency, today, onClose }) {
             </div>
           </Field>
 
-          {!editing && (
-            <Field label="Уже накоплено" hint="Сколько в копилке прямо сейчас. Запишем первой операцией.">
-              <div className="flex items-center gap-2">
-                <TextInput
-                  type="text"
-                  inputMode="decimal"
-                  value={form.already}
-                  onChange={(e) => set({ already: cleanAmountInput(e.target.value) })}
-                  placeholder="1000"
-                  className="flex-1 min-w-0 text-[17px] font-bold"
-                />
-                <span className="text-[16px] font-extrabold text-white/40 shrink-0 w-8 text-center">
-                  {currency}
-                </span>
-              </div>
-            </Field>
-          )}
+          <Field
+            label="Было накоплено до учёта"
+            hint="Деньги, которые лежали в копилке ещё до приложения. Считаются в прогресс, но взносом не становятся и с кошелька не резервируются."
+          >
+            <div className="flex items-center gap-2">
+              <TextInput
+                type="text"
+                inputMode="decimal"
+                value={form.already}
+                onChange={(e) => set({ already: cleanAmountInput(e.target.value) })}
+                placeholder="1040"
+                className="flex-1 min-w-0 text-[17px] font-bold"
+              />
+              <span className="text-[16px] font-extrabold text-white/40 shrink-0 w-8 text-center">
+                {currency}
+              </span>
+            </div>
+          </Field>
 
           <Field
             label="Откладывать с каждого прихода"

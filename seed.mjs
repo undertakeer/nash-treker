@@ -70,11 +70,10 @@ export function authSeed() {
     { id: "fo3", owner_id: uid, envelope_id: "en2", kind: "expense", amount: 126, note: "подарок", day: today, fee: 1.26, created_at: new Date().toISOString() },
     { id: "fo4", owner_id: uid, envelope_id: "en4", kind: "expense", amount: 112, note: "подписка", day: today, fee: 1.12, created_at: new Date().toISOString() },
     { id: "fo5", owner_id: uid, envelope_id: "en5", kind: "expense", amount: 45, note: "таблетки", day: today, fee: 0, off_wallet: false, created_at: new Date().toISOString() },
-    { id: "fo6", owner_id: uid, envelope_id: null, goal_id: "g1", kind: "save", amount: 100, note: "С прихода — Горы зимой", day: salaryDay, fee: 0, created_at: new Date().toISOString() },
     { id: "fo7", owner_id: uid, envelope_id: null, goal_id: "g2", kind: "save", amount: 50, note: "С прихода — Подушка", day: salaryDay, fee: 0, created_at: new Date().toISOString() },
   ]);
   put("finGoals", [
-    { id: "g1", owner_id: uid, title: "Копилка", emoji: "🏔", color: "violet", target: 4000, per_mode: "percent", per_income: 30, position: 1, archived: false, created_at: new Date().toISOString() },
+    { id: "g1", owner_id: uid, title: "Копилка", emoji: "🏔", color: "violet", target: 4000, per_mode: "percent", per_income: 30, opening: 1040, position: 1, archived: false, created_at: new Date().toISOString() },
     { id: "g2", owner_id: uid, title: "Подушка", emoji: "🪙", color: "sky", target: null, per_mode: "fixed", per_income: 550, position: 2, archived: false, created_at: new Date().toISOString() },
   ]);
   put("tasks", [

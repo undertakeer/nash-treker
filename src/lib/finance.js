@@ -227,9 +227,13 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
   const mine = period ? ops.filter((o) => inPeriod(o, period)) : [];
 
   const rows = live.map((g) => {
-    const saved = cents(
+    // то, что лежало до начала учёта, в прогресс входит, но деньгами
+    // с кошелька не является и взносом за период не считается
+    const opening = cents(g.opening);
+    const earmarked = cents(
       ops.filter((o) => o.kind === "save" && o.goal_id === g.id).reduce((s, o) => s + num(o.amount), 0)
     );
+    const saved = cents(opening + earmarked);
     const target = g.target === null || g.target === undefined ? null : cents(g.target);
 
     // сколько полагается внести в этом периоде и сколько уже внесено
@@ -242,6 +246,8 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
 
     return {
       goal: g,
+      opening,
+      earmarked,
       saved,
       target,
       left: target === null ? null : cents(Math.max(0, target - saved)),
@@ -258,6 +264,8 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
   return {
     rows: rows.sort((a, b) => (a.goal.position || 0) - (b.goal.position || 0)),
     saved: cents(rows.reduce((s, r) => s + r.saved, 0)),
+    // из баланса кошелька вычитается только отложенное здесь, не прошлые сбережения
+    earmarked: cents(rows.reduce((s, r) => s + r.earmarked, 0)),
     pending: cents(rows.reduce((s, r) => s + r.pending, 0)),
   };
 }
@@ -267,8 +275,8 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
  * лимиты разделов и минус отложенное под цели. Если ушло в минус — денег на
  * кошельке уже не хватает на то, что расписано.
  */
-export function spendableNow(balance, reserved, saved) {
-  return cents(num(balance) - num(reserved) - num(saved));
+export function spendableNow(balance, reserved, earmarked) {
+  return cents(num(balance) - num(reserved) - num(earmarked));
 }
 
 /** Разница между фактическим остатком и посчитанным — для правки баланса */
