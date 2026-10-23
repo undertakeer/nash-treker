@@ -342,7 +342,8 @@ supabase/functions/           две edge-функции
 ### Проверки
 
 ```bash
-npm run check     # eslint + модульные проверки + прогон сборки в jsdom
+npm run rules     # таблица правил: что откуда берётся и где считается
+npm run check     # eslint + модульные проверки + правила + прогон в jsdom
 npm run visual    # настоящий Chrome: скриншоты экранов, проверка что карта отрисовалась
 ```
 

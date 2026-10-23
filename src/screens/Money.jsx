@@ -275,7 +275,7 @@ export default function Money({ onOpenOps }) {
                   row={row}
                   currency={currency}
                   onSave={() => setSaveTo({ ...row.goal, pending: row.pending })}
-                  onEdit={() => setGoalEditor({ goal: row.goal })}
+                  onEdit={() => setGoalEditor({ goal: row.goal, earmarked: row.earmarked })}
                 />
               ))}
             </div>
@@ -286,6 +286,7 @@ export default function Money({ onOpenOps }) {
         open={Boolean(goalEditor)}
         goal={goalEditor?.goal || null}
         currency={currency}
+        earmarked={goalEditor?.earmarked || 0}
         onClose={() => setGoalEditor(null)}
       />
 
@@ -646,7 +647,7 @@ function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
 
 /** Цель-накопление: сколько собрано и сколько осталось до суммы */
 function GoalRow({ row, currency, onSave, onEdit }) {
-  const { goal: g, saved, opening, target, left, percent, done, due, paid, pending, settled } = row;
+  const { goal: g, saved, opening, earmarked, target, left, percent, done, due, paid, pending, settled } = row;
   const color = g.color || "violet";
 
   return (
@@ -705,6 +706,12 @@ function GoalRow({ row, currency, onSave, onEdit }) {
             </button>
           </div>
 
+          {opening > 0 && earmarked > 0 && (
+            <div className="mt-2 text-[11.5px] text-white/35">
+              {money(opening, currency)} было до учёта + {money(earmarked, currency)} отложено
+            </div>
+          )}
+
           {due > 0 && (
             <div
               className="mt-2.5 px-3 py-2 rounded-xl text-[12.5px] font-semibold flex items-center gap-2"
@@ -730,7 +737,7 @@ function GoalRow({ row, currency, onSave, onEdit }) {
 }
 
 /** Настройка цели: сумма и сколько уходит туда с каждой зарплаты */
-function GoalEditor({ open, goal, currency, onClose }) {
+function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
   const { createGoalSaving, updateGoalSaving, deleteGoalSaving } = useStore();
   const EMPTY = {
     title: "", emoji: "🎯", color: "violet", target: "",
@@ -836,7 +843,11 @@ function GoalEditor({ open, goal, currency, onClose }) {
 
           <Field
             label="Было накоплено до учёта"
-            hint="Деньги, которые лежали в копилке ещё до приложения. Считаются в прогресс, но взносом не становятся и с кошелька не резервируются."
+            hint={
+              earmarked > 0
+                ? `Отдельно от этого операциями отложено ${money(earmarked, currency)} — они считаются взносом и резервируются на кошельке. Если эта сумма на самом деле была накоплена раньше, удалите запись в истории и впишите её сюда.`
+                : "Деньги, которые лежали в копилке ещё до приложения. Считаются в прогресс, но взносом не становятся и с кошелька не резервируются."
+            }
           >
             <div className="flex items-center gap-2">
               <TextInput
