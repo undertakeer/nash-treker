@@ -106,8 +106,21 @@ if (mounted && process.argv[3] === "auth") {
   await click("События");
   await click("Сдать биохимию"); await click("Отмена");
   await click("Деньги");
-  await click("Накопления");  await click("Отмена");
+  await click("Накопления");  await click("Закрыть");
   await click("История операций"); await click("Закрыть");
+  await click("разбор");   await click("Закрыть");
+  // копилка со взносом: суммой и списком движений правят прямо в ней
+  await click("Подушка");
+  {
+    const t = (g.document.getElementById("root").textContent || "");
+    steps.push(
+      t.includes("Сколько сейчас в копилке") && t.includes("Движения")
+        ? "ок: в копилке есть сумма и список движений"
+        : "УПАЛО: копилку нельзя поправить"
+    );
+  }
+  await click("Отмена");
+  await click("Потратить");  await click("Отмена");
   await click("Карта");
   // WebGL в jsdom нет, поэтому карта честно уходит в заглушку — проверяем,
   // что экран показал хоть что-то из двух, а не белое пятно

@@ -8,8 +8,9 @@ import { useStore } from "../lib/store";
 import { COLORS, COLOR_KEYS, hex, rgba } from "../lib/theme";
 import { addDays, humanDate, todayISO } from "../lib/date";
 import {
-  adjustmentFor, cleanAmountInput, daysLeftIn, feeFor, goalsSummary, money, moneyExact,
-  parseAmount, periodLabel, periodPlan, periodsOf, spendableNow, walletBalance, withFee,
+  adjustmentFor, cleanAmountInput, daysLeftIn, doubleSpendHint, feeFor, goalsSummary, money,
+  moneyExact, parseAmount, periodLabel, periodPlan, periodsOf, plainAmount, spendableNow,
+  walletBalance, withFee,
 } from "../lib/finance";
 
 const EMOJI = [
@@ -18,7 +19,10 @@ const EMOJI = [
 ];
 
 export default function Money({ onOpenOps }) {
-  const { me, envelopes, finOps, finGoals, missing, addFinOp, addIncomeWithSavings } = useStore();
+  const {
+    me, envelopes, finOps, finGoals, missing,
+    addFinOp, updateFinOp, deleteFinOp, addIncomeWithSavings,
+  } = useStore();
   const feePercent = Number(me?.fin_fee_percent ?? 1);
   const currency = me?.fin_currency || "$";
   const today = todayISO();
@@ -32,6 +36,9 @@ export default function Money({ onOpenOps }) {
   const [editOp, setEditOp] = useState(null);
   const [goalEditor, setGoalEditor] = useState(null);
   const [saveTo, setSaveTo] = useState(null);
+  const [takeFrom, setTakeFrom] = useState(null);
+  const [breakdown, setBreakdown] = useState(false);
+  const [fixing, setFixing] = useState(false);
 
   // периоды идут от прихода до прихода, а не по календарю
   const periods = useMemo(() => periodsOf(finOps, today), [finOps, today]);
@@ -49,6 +56,34 @@ export default function Money({ onOpenOps }) {
     [finGoals, finOps, period, plan.income]
   );
   const spendable = spendableNow(balance, plan.reserved, goals.earmarked, goals.pending);
+  // сколько из этого прихода забирают копилки: «не разложено» без этого врёт
+  const goalsDue = goals.rows.reduce((s, r) => s + r.due, 0);
+  const unplanned = Math.round((plan.free - goalsDue) * 100) / 100;
+  // минус почти всегда означает одно: снятие записано и тратой, и откладыванием
+  const doubled = useMemo(
+    () => (spendable < 0 ? doubleSpendHint(finOps, period) : null),
+    [spendable, finOps, period]
+  );
+
+  /** Убираем лишнюю трату и помечаем откладывания снятыми — деньги ушли один раз */
+  async function fixDoubled() {
+    if (!doubled || fixing) return;
+    setFixing(true);
+    try {
+      // комиссию снятия переносим на первую пометку, чтобы баланс кошелька
+      // после правки остался ровно тем же
+      const fee = Number(doubled.expense.fee) || 0;
+      // сначала пометки, и только если все прошли — убираем лишнюю трату:
+      // иначе на полпути получится ещё более кривой расклад
+      for (const [i, op] of doubled.saves.entries()) {
+        const patch = i === 0 && fee > 0 ? { withdrawn: true, fee } : { withdrawn: true };
+        if (!(await updateFinOp(op.id, patch))) return;
+      }
+      await deleteFinOp(doubled.expense.id);
+    } finally {
+      setFixing(false);
+    }
+  }
 
   // без лимита разделу нечего исчерпывать — он всегда на виду
   const openRows = plan.rows.filter((r) => r.unlimited || r.left > 0);
@@ -96,7 +131,7 @@ export default function Money({ onOpenOps }) {
           <span className="text-[14px] font-semibold text-white/40">поправить</span>
         </button>
         <div className="text-[12.5px] text-white/45 mt-2">
-          с {humanDate(period.from)}: пришло {money(plan.income, currency)} · снято {money(plan.spent, currency)}
+          с {humanDate(period.from)}: пришло {money(plan.income, currency)} · ушло {money(plan.outflow, currency)}
           {plan.fees > 0 ? ` · комиссия ${moneyExact(plan.fees, currency)}` : ""}
         </div>
         <div className="grid grid-cols-2 gap-2 mt-4">
@@ -135,9 +170,13 @@ export default function Money({ onOpenOps }) {
               <span className="font-bold">{money(goals.pending, currency)}</span>
             </div>
           )}
-          <div className="flex items-center justify-between pt-1.5 border-t border-white/6">
+          <button
+            onClick={() => setBreakdown(true)}
+            className="press w-full flex items-center justify-between pt-1.5 border-t border-white/6 text-left"
+          >
             <span className="text-[13px] font-semibold">
               {spendable < 0 ? "Не хватает на расписанное" : "Свободно сверх этого"}
+              <span className="text-white/25 font-medium"> · разбор ›</span>
             </span>
             <span
               className="text-[16px] font-extrabold"
@@ -145,11 +184,31 @@ export default function Money({ onOpenOps }) {
             >
               {money(spendable, currency)}
             </span>
-          </div>
-          {spendable < 0 && (
+          </button>
+          {spendable < 0 && !doubled && (
             <div className="text-[11.5px] leading-relaxed" style={{ color: hex("rose") }}>
-              На кошельке меньше, чем расписано по лимитам и целям. Снимать нечего —
-              или поправьте лимиты.
+              На кошельке меньше, чем расписано по лимитам и целям. Если эти деньги уже
+              сняты — откройте копилку и поправьте взнос, иначе уменьшите лимиты.
+            </div>
+          )}
+          {doubled && (
+            <div
+              className="rounded-xl px-3 py-2.5 mt-1"
+              style={{ background: rgba("amber", 0.12), border: `1px solid ${rgba("amber", 0.25)}` }}
+            >
+              <div className="text-[12px] leading-relaxed" style={{ color: hex("amber") }}>
+                Похоже, {money(doubled.amount, currency)} посчитаны дважды: записаны тратой
+                и тем же числом отложены в {doubled.saves.length === 1 ? "копилку" : "копилки"}.
+                Физически деньги ушли один раз.
+              </div>
+              <button
+                onClick={fixDoubled}
+                disabled={fixing}
+                className="press w-full mt-2 py-2 rounded-lg text-[12.5px] font-bold"
+                style={{ background: hex("amber"), color: "#0A0A0E" }}
+              >
+                Убрать трату и отметить снятие
+              </button>
             </div>
           )}
         </div>
@@ -185,7 +244,16 @@ export default function Money({ onOpenOps }) {
       {live > 0 && (
         <div className="rounded-2xl bg-white/5 border border-white/8 px-4 py-3 mb-3 flex items-center justify-between">
           <div>
-            <div className="text-[13px] font-semibold text-white/45">Не разложено</div>
+            <div className="text-[13px] font-semibold text-white/45">Не разложено с прихода</div>
+            <div className="text-[11.5px] text-white/30 mt-0.5">
+              разделы: {money(plan.allocated, currency)}
+              {goalsDue > 0 ? ` · копилки: ${money(goalsDue, currency)}` : ""}
+            </div>
+            {unplanned < 0 && (
+              <div className="text-[11.5px] mt-0.5" style={{ color: hex("amber") }}>
+                разделы и копилки просят больше, чем пришло
+              </div>
+            )}
             {plan.looseSpent > 0 && (
               <div className="text-[11.5px] text-white/30 mt-0.5">
                 траты без раздела: {money(plan.looseSpent, currency)}
@@ -193,10 +261,10 @@ export default function Money({ onOpenOps }) {
             )}
           </div>
           <div
-            className="text-[17px] font-extrabold"
-            style={{ color: plan.free < 0 ? hex("rose") : "#fff" }}
+            className="text-[17px] font-extrabold shrink-0"
+            style={{ color: unplanned < 0 ? hex("rose") : "#fff" }}
           >
-            {money(plan.free, currency)}
+            {money(unplanned, currency)}
           </div>
         </div>
       )}
@@ -251,7 +319,14 @@ export default function Money({ onOpenOps }) {
 
       <div className="mt-6">
           <div className="flex items-center justify-between mb-2.5 px-1">
-            <h3 className="text-[13px] font-bold tracking-[0.1em] uppercase text-white/30">Цели</h3>
+            <h3 className="text-[13px] font-bold tracking-[0.1em] uppercase text-white/30">
+              Цели
+              {goals.saved > 0 && (
+                <span className="text-white/25 normal-case tracking-normal font-semibold">
+                  {" "}· всего {money(goals.saved, currency)}
+                </span>
+              )}
+            </h3>
             <button
               onClick={() => setGoalEditor({ goal: null })}
               className="press text-[12.5px] font-semibold text-white/40"
@@ -281,7 +356,8 @@ export default function Money({ onOpenOps }) {
                   row={row}
                   currency={currency}
                   onSave={() => setSaveTo({ ...row.goal, pending: row.pending })}
-                  onEdit={() => setGoalEditor({ goal: row.goal, earmarked: row.earmarked })}
+                  onTake={() => setTakeFrom({ ...row.goal, saved: row.saved, earmarked: row.earmarked })}
+                  onEdit={() => setGoalEditor({ goal: row.goal })}
                 />
               ))}
             </div>
@@ -291,9 +367,15 @@ export default function Money({ onOpenOps }) {
       <GoalEditor
         open={Boolean(goalEditor)}
         goal={goalEditor?.goal || null}
+        row={goalEditor?.goal ? goals.rows.find((r) => r.goal.id === goalEditor.goal.id) : null}
+        ops={goalEditor?.goal
+          ? finOps.filter(
+              (o) => (o.kind === "save" || o.kind === "unsave") && o.goal_id === goalEditor.goal.id
+            )
+          : []}
         currency={currency}
-        earmarked={goalEditor?.earmarked || 0}
         onClose={() => setGoalEditor(null)}
+        onOpenOp={(op) => { setGoalEditor(null); setEditOp(op); }}
       />
 
       <AmountSheet
@@ -320,6 +402,46 @@ export default function Money({ onOpenOps }) {
           });
           setSaveTo(null);
         }}
+      />
+
+      <AmountSheet
+        open={Boolean(takeFrom)}
+        title={takeFrom ? `${takeFrom.emoji} ${takeFrom.title}` : ""}
+        hint={takeFrom
+          ? `В копилке ${money(takeFrom.saved, currency)}. Сумма уйдёт из накопленного.`
+          : ""}
+        actionLabel="Потратить из копилки"
+        colorKey={takeFrom?.color || "violet"}
+        currency={currency}
+        withOptions
+        defaultOffWallet={!takeFrom?.earmarked}
+        optionLabel="Деньги лежали на кошельке"
+        optionHint="Включено — баланс кошелька тоже уменьшится. Выключите, если тратите наличные, снятые в копилку раньше: баланс не тронем."
+        feePercent={feePercent}
+        onClose={() => setTakeFrom(null)}
+        onSubmit={async (amount, note, day, extra) => {
+          await addFinOp({
+            kind: "unsave",
+            goal_id: takeFrom.id,
+            envelope_id: null,
+            amount,
+            note: note || null,
+            day: today,
+            off_wallet: extra.offWallet,
+            fee: extra.offWallet || !extra.takeFee ? 0 : feeFor(amount, feePercent),
+          });
+          setTakeFrom(null);
+        }}
+      />
+
+      <SpendableBreakdown
+        open={breakdown}
+        currency={currency}
+        balance={balance}
+        plan={plan}
+        goals={goals}
+        spendable={spendable}
+        onClose={() => setBreakdown(false)}
       />
 
       <ClosedEnvelopes
@@ -362,6 +484,7 @@ export default function Money({ onOpenOps }) {
         currency={currency}
         feePercent={feePercent}
         envelopes={envelopes}
+        goals={finGoals}
         onClose={() => setEditOp(null)}
       />
 
@@ -482,7 +605,9 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
 function AmountSheet({
   open, title, hint, actionLabel, colorKey, currency, onClose, onSubmit,
   withDate = false, withOptions = false, withWithdraw = false,
-  today, feePercent = 0, defaultAmount = "",
+  today, feePercent = 0, defaultAmount = "", defaultOffWallet = false,
+  optionLabel = "Снято с кошелька",
+  optionHint = "Выключите, если платили не с крипты. Лимит раздела спишется, баланс кошелька не тронем.",
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -497,9 +622,9 @@ function AmountSheet({
     setAmount(defaultAmount);
     setDay(today);
     setTakeFee(true);
-    setOffWallet(false);
+    setOffWallet(defaultOffWallet);
     setWithdrawn(false);
-  }, [open, today, defaultAmount]);
+  }, [open, today, defaultAmount, defaultOffWallet]);
 
   const value = parseAmount(amount);
   const valid = value !== null && value > 0;
@@ -546,11 +671,8 @@ function AmountSheet({
             <div className="rounded-2xl bg-white/5 border border-white/8 divide-y divide-white/6">
               <div className="flex items-center justify-between gap-3 px-4 py-3.5">
                 <div>
-                  <div className="text-[14.5px] font-semibold">Снято с кошелька</div>
-                  <div className="text-[12.5px] text-white/35 leading-relaxed">
-                    Выключите, если платили не с крипты. Лимит раздела спишется,
-                    баланс кошелька не тронем.
-                  </div>
+                  <div className="text-[14.5px] font-semibold">{optionLabel}</div>
+                  <div className="text-[12.5px] text-white/35 leading-relaxed">{optionHint}</div>
                 </div>
                 <Switch checked={!offWallet} onChange={(v) => setOffWallet(!v)} />
               </div>
@@ -689,9 +811,10 @@ function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
 }
 
 /** Цель-накопление: сколько собрано и сколько осталось до суммы */
-function GoalRow({ row, currency, onSave, onEdit }) {
+function GoalRow({ row, currency, onSave, onTake, onEdit }) {
   const {
-    goal: g, saved, opening, earmarked, movedOut, target, left, percent, done, due, paid, pending, settled,
+    goal: g, saved, opening, earmarked, movedOut, taken,
+    target, left, percent, done, due, paid, pending, settled,
   } = row;
   const color = g.color || "violet";
 
@@ -738,26 +861,37 @@ function GoalRow({ row, currency, onSave, onEdit }) {
 
         <div className="mt-3">
           {percent !== null && <Progress percent={percent} colorKey={done ? "mint" : color} />}
-          <div className="flex items-center justify-between mt-2">
-            <div className="text-[11.5px] text-white/35">
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <div className="text-[11.5px] text-white/35 min-w-0 truncate">
               {left !== null && left > 0 ? `осталось собрать ${money(left, currency)}` : "копится"}
             </div>
-            <button
-              onClick={onSave}
-              className="press px-3 py-1.5 rounded-lg text-[12px] font-bold"
-              style={{ background: rgba(color, 0.22), color: hex(color) }}
-            >
-              Отложить
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {saved > 0 && (
+                <button
+                  onClick={onTake}
+                  className="press px-3 py-1.5 rounded-lg text-[12px] font-bold bg-white/8 text-white/55"
+                >
+                  Потратить
+                </button>
+              )}
+              <button
+                onClick={onSave}
+                className="press px-3 py-1.5 rounded-lg text-[12px] font-bold"
+                style={{ background: rgba(color, 0.22), color: hex(color) }}
+              >
+                Отложить
+              </button>
+            </div>
           </div>
 
-          {[opening, earmarked, movedOut].filter((v) => v > 0).length > 1 && (
+          {([opening, earmarked, movedOut].filter((v) => v > 0).length > 1 || taken > 0) && (
             <div className="mt-2 text-[11.5px] text-white/35">
               {[
                 opening > 0 ? `${money(opening, currency)} было до учёта` : null,
                 movedOut > 0 ? `${money(movedOut, currency)} снято в копилку` : null,
                 earmarked > 0 ? `${money(earmarked, currency)} помечено на кошельке` : null,
               ].filter(Boolean).join(" + ")}
+              {taken > 0 ? ` − ${money(taken, currency)} потрачено` : ""}
             </div>
           )}
 
@@ -786,16 +920,39 @@ function GoalRow({ row, currency, onSave, onEdit }) {
 }
 
 /** Настройка цели: сумма и сколько уходит туда с каждой зарплаты */
-function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
-  const { createGoalSaving, updateGoalSaving, deleteGoalSaving } = useStore();
+function GoalEditor({ open, goal, row = null, ops = [], currency, onClose, onOpenOp }) {
+  const {
+    createGoalSaving, updateGoalSaving, deleteGoalSaving, deleteFinOp, showToast,
+  } = useStore();
   const EMPTY = {
     title: "", emoji: "🎯", color: "violet", target: "",
-    per_mode: "fixed", per_income: "", note: "", already: "",
+    per_mode: "fixed", per_income: "", note: "", total: "",
   };
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmMove, setConfirmMove] = useState(false);
   const editing = Boolean(goal);
+
+  // всё, что записано операциями: отложенное минус потраченное из копилки
+  const earmarked = row?.earmarked || 0;
+  // пометки на кошельке целиком — их и переносим в «накоплено до учёта»
+  const marked = useMemo(
+    () => Math.round(ops
+      .filter((o) => o.kind === "save" && !o.withdrawn)
+      .reduce((sum, o) => sum + Number(o.amount), 0) * 100) / 100,
+    [ops]
+  );
+  const contributed = useMemo(
+    () => Math.round(ops.reduce(
+      (sum, o) => sum + (o.kind === "unsave" ? -1 : 1) * Number(o.amount), 0
+    ) * 100) / 100,
+    [ops]
+  );
+  const history = useMemo(
+    () => [...ops].sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0)),
+    [ops]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -804,20 +961,29 @@ function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
           ...goal,
           target: goal.target === null || goal.target === undefined ? "" : String(goal.target),
           per_income: String(goal.per_income ?? ""),
-          already: Number(goal.opening) ? String(goal.opening) : "",
+          // в поле живёт вся сумма копилки, а не только доприложенная часть
+          total: plainAmount(Number(goal.opening || 0) + contributed),
           note: goal.note || "",
         }
       : EMPTY);
     setConfirmDelete(false);
+    setConfirmMove(false);
     setBusy(false);
+    // contributed меняется вместе с операциями — переоткрытие подхватит новое
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, goal]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const color = form.color || "violet";
   const target = form.target === "" ? null : parseAmount(form.target);
   const perIncome = form.per_income === "" ? 0 : parseAmount(form.per_income);
+  // сумма копилки не может быть меньше того, что уже записано операциями:
+  // иначе «накоплено до учёта» уехало бы в минус
+  const total = form.total === "" ? 0 : parseAmount(form.total);
+  const shortfall = total !== null && total < contributed;
+  const opening = total === null ? 0 : Math.max(0, total - contributed);
   const valid = Boolean(form.title.trim()) && target !== undefined && perIncome !== null
-    && (form.target === "" || target !== null);
+    && (form.target === "" || target !== null) && total !== null && !shortfall;
 
   async function save() {
     if (!valid || busy) return;
@@ -830,7 +996,7 @@ function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
       per_mode: form.per_mode,
       per_income: perIncome || 0,
       // отдельным полем, а не операцией: это не взнос и не деньги с кошелька
-      opening: parseAmount(form.already) || 0,
+      opening,
       note: form.note?.trim() || null,
     };
     try {
@@ -846,6 +1012,30 @@ function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     await deleteGoalSaving(goal.id);
     onClose();
+  }
+
+  /**
+   * Взносы, помеченные на кошельке, превращаем в «было до учёта»: сумма в
+   * копилке та же, но кошелёк её больше не резервирует. Это выход, когда
+   * деньги уже ушли тратой, а копилку заполнили теми же деньгами второй раз.
+   */
+  async function moveToOpening() {
+    // только пометки на кошельке: снятые деньги и траты из копилки трогать нельзя
+    const moving = ops.filter((o) => o.kind === "save" && !o.withdrawn);
+    if (!moving.length || busy) return;
+    if (!confirmMove) { setConfirmMove(true); return; }
+    setBusy(true);
+    try {
+      const sum = moving.reduce((s, o) => s + Number(o.amount), 0);
+      // пока сумма не легла в «накоплено», записи не трогаем: иначе деньги
+      // пропали бы совсем
+      if (!(await updateGoalSaving(goal.id, { opening: Number(goal.opening || 0) + sum }))) return;
+      for (const o of moving) await deleteFinOp(o.id);
+      showToast("Перенесено в накопленное", "🎯");
+      onClose();
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -891,19 +1081,28 @@ function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
           </Field>
 
           <Field
-            label="Было накоплено до учёта"
+            label="Сколько сейчас в копилке"
             hint={
-              earmarked > 0
-                ? `Отдельно от этого операциями отложено ${money(earmarked, currency)} — они считаются взносом и резервируются на кошельке. Если эта сумма на самом деле была накоплена раньше, удалите запись в истории и впишите её сюда.`
-                : "Деньги, которые лежали в копилке ещё до приложения. Считаются в прогресс, но взносом не становятся и с кошелька не резервируются."
+              shortfall ? (
+                <span style={{ color: hex("rose") }}>
+                  Операциями записано {money(contributed, currency)} — меньше этой суммы быть
+                  не может. Поправьте или удалите запись в списке ниже.
+                </span>
+              ) : contributed !== 0 ? (
+                `${money(opening, currency)} лежало до учёта, операциями ниже ${
+                  contributed > 0 ? "добавлено" : "потрачено"
+                } ${money(Math.abs(contributed), currency)}.`
+              ) : (
+                "Вся сумма копилки. В прогресс идёт, но взносом за период не считается и на кошельке не резервируется."
+              )
             }
           >
             <div className="flex items-center gap-2">
               <TextInput
                 type="text"
                 inputMode="decimal"
-                value={form.already}
-                onChange={(e) => set({ already: cleanAmountInput(e.target.value) })}
+                value={form.total}
+                onChange={(e) => set({ total: cleanAmountInput(e.target.value) })}
                 placeholder="1040"
                 className="flex-1 min-w-0 text-[17px] font-bold"
               />
@@ -912,6 +1111,44 @@ function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
               </span>
             </div>
           </Field>
+
+          {editing && history.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <h3 className="text-[13px] font-bold tracking-[0.1em] uppercase text-white/30">
+                  Движения
+                </h3>
+                <span className="text-[12px] text-white/30">{money(contributed, currency)}</span>
+              </div>
+              <div className="space-y-1.5">
+                {history.map((op) => (
+                  <OpLine key={op.id} op={op} currency={currency} onClick={() => onOpenOp(op)} />
+                ))}
+              </div>
+              <div className="text-[12px] text-white/30 mt-2 leading-relaxed">
+                Нажмите на запись, чтобы изменить сумму, дату или удалить её.
+              </div>
+
+              {earmarked > 0 && (
+                <button
+                  onClick={moveToOpening}
+                  disabled={busy}
+                  className="press w-full mt-2.5 py-2.5 rounded-xl text-[12.5px] font-semibold leading-snug px-3"
+                  style={{ background: rgba("amber", 0.16), color: hex("amber") }}
+                >
+                  {confirmMove
+                    ? "Точно перенести?"
+                    : `Это не новые взносы — перенести ${money(marked, currency)} в накопленное`}
+                </button>
+              )}
+              {earmarked > 0 && (
+                <div className="text-[12px] text-white/30 mt-1.5 leading-relaxed">
+                  Сумма в копилке не изменится, но кошелёк перестанет держать её в резерве.
+                  Нужно, если эти деньги вы уже списали тратой.
+                </div>
+              )}
+            </div>
+          )}
 
           <Field
             label="Откладывать с каждого прихода"
@@ -1003,12 +1240,105 @@ function GoalEditor({ open, goal, currency, earmarked = 0, onClose }) {
   );
 }
 
+/** Строка разбора: подпись слева, сумма справа; sub — вложенный пункт */
+function BreakdownLine({ label, value, sub = false }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 ${sub ? "pl-3" : ""}`}>
+      <span className={sub ? "text-[12.5px] text-white/35 min-w-0 truncate" : "text-[14px] text-white/70"}>
+        {label}
+      </span>
+      <span className={`shrink-0 font-bold ${sub ? "text-[12.5px] text-white/35" : "text-[14.5px]"}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** Разбор: из чего сложилось «свободно», построчно и с подписями */
+function SpendableBreakdown({ open, currency, balance, plan, goals, spendable, onClose }) {
+  const limits = plan.rows.filter((r) => !r.unlimited && r.left > 0);
+  const marked = goals.rows.filter((r) => r.earmarked > 0);
+  const owed = goals.rows.filter((r) => r.pending > 0);
+
+  return (
+    <Sheet open={open} onClose={onClose} tall>
+      <div className="px-5 pb-12">
+        <div className="flex items-center justify-between py-3">
+          <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Закрыть</button>
+          <div className="text-[15px] font-bold">Откуда это число</div>
+          <span className="w-14" />
+        </div>
+
+        <div className="rounded-2xl bg-white/5 border border-white/8 px-4 py-4 space-y-3">
+          <BreakdownLine label="На кошельке" value={money(balance, currency)} />
+
+          <div className="space-y-1.5 pt-1 border-t border-white/6">
+            <BreakdownLine label="− не потраченные лимиты" value={money(plan.reserved, currency)} />
+            {limits.map((r) => (
+              <BreakdownLine
+                key={r.envelope.id}
+                sub
+                label={`${r.envelope.emoji} ${r.envelope.title}`}
+                value={money(r.left, currency)}
+              />
+            ))}
+            {!limits.length && (
+              <div className="pl-3 text-[12.5px] text-white/25">лимиты уже израсходованы</div>
+            )}
+          </div>
+
+          <div className="space-y-1.5 pt-1 border-t border-white/6">
+            <BreakdownLine label="− отложено на кошельке" value={money(goals.earmarked, currency)} />
+            {marked.map((r) => (
+              <BreakdownLine key={r.goal.id} sub label={`${r.goal.emoji} ${r.goal.title}`} value={money(r.earmarked, currency)} />
+            ))}
+            {!marked.length && (
+              <div className="pl-3 text-[12.5px] text-white/25">
+                помеченных под цели денег на кошельке нет
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5 pt-1 border-t border-white/6">
+            <BreakdownLine label="− ещё отложить в копилки" value={money(goals.pending, currency)} />
+            {owed.map((r) => (
+              <BreakdownLine key={r.goal.id} sub label={`${r.goal.emoji} ${r.goal.title}`} value={money(r.pending, currency)} />
+            ))}
+            {!owed.length && (
+              <div className="pl-3 text-[12.5px] text-white/25">взносы этого периода закрыты</div>
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between gap-3 pt-2.5 border-t border-white/10">
+            <span className="text-[14.5px] font-bold">
+              {spendable < 0 ? "Не хватает" : "Свободно"}
+            </span>
+            <span
+              className="text-[20px] font-extrabold"
+              style={{ color: spendable < 0 ? hex("rose") : hex("mint") }}
+            >
+              {money(spendable, currency)}
+            </span>
+          </div>
+        </div>
+
+        <div className="text-[12.5px] text-white/35 leading-relaxed mt-4 px-1">
+          Снятые в копилку деньги сюда не входят: их на кошельке уже нет, баланс
+          уменьшился в момент снятия. Помеченные под цель — наоборот, лежат на
+          кошельке, поэтому тратить их нельзя.
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
 /** Одна строка истории: дата, на что, сумма и пометки */
 function OpLine({ op, currency, onClick }) {
   const plus = op.kind === "income" || (op.kind === "adjust" && Number(op.amount) > 0);
   const adjust = op.kind === "adjust";
   const saving = op.kind === "save";
-  const amount = op.kind === "expense" ? withFee(op) : Math.abs(Number(op.amount));
+  const taking = op.kind === "unsave";
+  const amount = op.kind === "expense" || taking ? withFee(op) : Math.abs(Number(op.amount));
 
   return (
     <button
@@ -1018,20 +1348,30 @@ function OpLine({ op, currency, onClick }) {
     >
       <span className="flex-1 min-w-0">
         <span className="block text-[14.5px] font-semibold truncate">
-          {op.note || (adjust ? "Правка баланса" : saving ? "Отложено" : plus ? "Приход" : "Трата")}
+          {op.note
+            || (adjust ? "Правка баланса"
+              : saving ? "Отложено"
+              : taking ? "Трата из копилки"
+              : plus ? "Приход" : "Трата")}
         </span>
         <span className="block text-[12px] text-white/35 truncate">
           {humanDate(op.day)}
           {op.kind === "expense" && op.off_wallet ? " · не с кошелька" : ""}
           {saving ? (op.withdrawn ? " · снято со счёта" : " · помечено на кошельке") : ""}
+          {taking ? (op.off_wallet ? " · наличными из копилки" : " · с кошелька") : ""}
           {Number(op.fee) > 0 ? ` · комиссия ${moneyExact(op.fee, currency)}` : ""}
         </span>
       </span>
       <span
         className="text-[15px] font-extrabold shrink-0"
-        style={{ color: plus ? hex("mint") : adjust ? hex("amber") : saving ? hex("violet") : "#fff" }}
+        style={{
+          color: plus ? hex("mint")
+            : adjust ? hex("amber")
+            : saving ? hex("violet")
+            : taking ? hex("sky") : "#fff",
+        }}
       >
-        {saving ? "→ " : plus ? "+" : "−"}{moneyExact(amount, currency)}
+        {saving ? "→ " : taking ? "← " : plus ? "+" : "−"}{moneyExact(amount, currency)}
       </span>
       {onClick && <span className="text-[15px] text-white/20 shrink-0">›</span>}
     </button>
@@ -1183,8 +1523,9 @@ function BalanceFix({ open, currency, balance, today, onClose, onSubmit }) {
 }
 
 /** Правка уже записанной операции: сумма, дата, раздел, комиссия */
-function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
+function OpEditor({ op, currency, feePercent, envelopes, goals = [], onClose }) {
   const { updateFinOp, deleteFinOp } = useStore();
+  const [retype, setRetype] = useState(false);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [day, setDay] = useState("");
@@ -1205,6 +1546,7 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
     setOffWallet(Boolean(op.off_wallet));
     setWithdrawn(Boolean(op.withdrawn));
     setConfirmDelete(false);
+    setRetype(false);
     setBusy(false);
   }, [op]);
 
@@ -1213,7 +1555,9 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
   const expense = op?.kind === "expense";
   const adjust = op?.kind === "adjust";
   const saving = op?.kind === "save";
+  const taking = op?.kind === "unsave";
   const sign = adjust && Number(op?.amount) < 0 ? -1 : 1;
+  const liveGoals = goals.filter((g) => !g.archived);
 
   async function save() {
     if (!valid || busy) return;
@@ -1232,6 +1576,10 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
       patch.withdrawn = withdrawn;
       patch.fee = withdrawn && takeFee ? feeFor(value, feePercent) : 0;
     }
+    if (taking) {
+      patch.off_wallet = offWallet;
+      patch.fee = offWallet || !takeFee ? 0 : feeFor(value, feePercent);
+    }
     try {
       await updateFinOp(op.id, patch);
       onClose();
@@ -1246,6 +1594,45 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
     onClose();
   }
 
+  /**
+   * Запись записана не тем видом: трату превращаем в откладывание и обратно.
+   * Баланс кошелька при этом не меняется — если деньги уже ушли с кошелька,
+   * откладывание помечаем снятием, и наоборот.
+   */
+  async function toSaving(goalId) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateFinOp(op.id, {
+        kind: "save",
+        goal_id: goalId,
+        envelope_id: null,
+        withdrawn: !op.off_wallet,
+        off_wallet: false,
+      });
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toExpense(envelopeId) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateFinOp(op.id, {
+        kind: "expense",
+        envelope_id: envelopeId,
+        goal_id: null,
+        off_wallet: !op.withdrawn,
+        withdrawn: false,
+      });
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Sheet open={Boolean(op)} onClose={onClose} tall>
       {op && (
@@ -1253,7 +1640,11 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
           <div className="flex items-center justify-between py-3">
             <button onClick={onClose} className="press text-[15px] text-white/50 font-medium">Отмена</button>
             <div className="text-[15px] font-bold">
-              {expense ? "Трата" : adjust ? "Правка баланса" : "Приход"}
+              {expense ? "Трата"
+                : adjust ? "Правка баланса"
+                : saving ? "Откладывание"
+                : taking ? "Трата из копилки"
+                : "Приход"}
             </div>
             <button
               onClick={save}
@@ -1314,6 +1705,27 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
               </div>
             )}
 
+            {taking && (
+              <div className="rounded-2xl bg-white/5 border border-white/8 divide-y divide-white/6">
+                <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                  <div>
+                    <div className="text-[14.5px] font-semibold">Деньги лежали на кошельке</div>
+                    <div className="text-[12.5px] text-white/35 leading-relaxed">
+                      Включено — баланс кошелька тоже уменьшается. Выключено —
+                      тратили наличные, снятые в копилку раньше.
+                    </div>
+                  </div>
+                  <Switch checked={!offWallet} onChange={(v) => setOffWallet(!v)} />
+                </div>
+                {!offWallet && feePercent > 0 && (
+                  <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                    <div className="text-[14.5px] font-semibold">Комиссия {feePercent}%</div>
+                    <Switch checked={takeFee} onChange={setTakeFee} />
+                  </div>
+                )}
+              </div>
+            )}
+
             {expense && (
               <>
                 <Field label="Раздел">
@@ -1360,6 +1772,60 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
                   )}
                 </div>
               </>
+            )}
+
+            {(expense || saving) && (
+              <div>
+                <button
+                  onClick={() => setRetype((v) => !v)}
+                  className="press w-full py-3 rounded-2xl bg-white/5 text-[13.5px] font-semibold text-white/55"
+                >
+                  {expense ? "Это было откладывание в копилку" : "Это была трата, а не копилка"}
+                </button>
+                {retype && (
+                  <div className="mt-2.5">
+                    <div className="text-[12px] text-white/30 leading-relaxed mb-2 px-1">
+                      Баланс кошелька не изменится — поменяется только то, куда
+                      записаны деньги. Выберите, куда перенести.
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {expense
+                        ? liveGoals.map((g) => (
+                            <button
+                              key={g.id}
+                              onClick={() => toSaving(g.id)}
+                              disabled={busy}
+                              className="press px-3 py-2 rounded-xl text-[13px] font-semibold flex items-center gap-1.5"
+                              style={{
+                                background: rgba(g.color || "violet", 0.18),
+                                border: `1px solid ${rgba(g.color || "violet", 0.35)}`,
+                              }}
+                            >
+                              <span>{g.emoji}</span>{g.title}
+                            </button>
+                          ))
+                        : [{ id: null, title: "Без раздела", emoji: "💸", color: "slate" },
+                           ...envelopes.filter((e) => !e.archived)].map((e) => (
+                            <button
+                              key={e.id || "none"}
+                              onClick={() => toExpense(e.id)}
+                              disabled={busy}
+                              className="press px-3 py-2 rounded-xl text-[13px] font-semibold flex items-center gap-1.5"
+                              style={{
+                                background: rgba(e.color || "slate", 0.18),
+                                border: `1px solid ${rgba(e.color || "slate", 0.35)}`,
+                              }}
+                            >
+                              <span>{e.emoji}</span>{e.title}
+                            </button>
+                          ))}
+                      {expense && !liveGoals.length && (
+                        <div className="text-[13px] text-white/35">Копилок пока нет.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             <Button variant="danger" onClick={remove}>
@@ -1609,12 +2075,15 @@ function EnvelopeEditor({ open, envelope, currency, emojiList, onClose }) {
 }
 
 export function MoneyOps({ open, onClose }) {
-  const { me, envelopes, finOps } = useStore();
+  const { me, envelopes, finOps, finGoals } = useStore();
   const currency = me?.fin_currency || "$";
   const feePercent = Number(me?.fin_fee_percent ?? 1);
   const [editOp, setEditOp] = useState(null);
-  const [goalEditor, setGoalEditor] = useState(null);
-  const [saveTo, setSaveTo] = useState(null);
+  // свежие записи сверху: операцию могли записать задним числом
+  const history = useMemo(
+    () => [...finOps].sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0)),
+    [finOps]
+  );
 
   return (
     <>
@@ -1630,7 +2099,7 @@ export function MoneyOps({ open, onClose }) {
             <Empty emoji="🧾" title="Операций пока нет" subtitle="Записи о приходах и тратах появятся здесь." />
           ) : (
             <div className="space-y-1.5">
-              {finOps.map((o) => (
+              {history.map((o) => (
                 <OpLine key={o.id} op={o} currency={currency} onClick={() => setEditOp(o)} />
               ))}
             </div>
@@ -1643,6 +2112,7 @@ export function MoneyOps({ open, onClose }) {
         currency={currency}
         feePercent={feePercent}
         envelopes={envelopes}
+        goals={finGoals}
         onClose={() => setEditOp(null)}
       />
     </>

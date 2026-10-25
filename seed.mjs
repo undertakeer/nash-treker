@@ -71,6 +71,7 @@ export function authSeed() {
     { id: "fo4", owner_id: uid, envelope_id: "en4", kind: "expense", amount: 112, note: "подписка", day: today, fee: 1.12, created_at: new Date().toISOString() },
     { id: "fo5", owner_id: uid, envelope_id: "en5", kind: "expense", amount: 45, note: "таблетки", day: today, fee: 0, off_wallet: false, created_at: new Date().toISOString() },
     { id: "fo7", owner_id: uid, envelope_id: null, goal_id: "g2", kind: "save", amount: 50, note: "С прихода — Подушка", day: salaryDay, fee: 0, created_at: new Date().toISOString() },
+    { id: "fo8", owner_id: uid, envelope_id: null, goal_id: "g1", kind: "unsave", amount: 40, note: "билеты", day: today, fee: 0, off_wallet: true, created_at: new Date().toISOString() },
   ]);
   put("finGoals", [
     { id: "g1", owner_id: uid, title: "Копилка", emoji: "🏔", color: "violet", target: 4000, per_mode: "percent", per_income: 30, opening: 1040, position: 1, archived: false, created_at: new Date().toISOString() },

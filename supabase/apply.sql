@@ -418,3 +418,26 @@ where exists (
 );
 
 delete from public.fin_ops where kind = 'save' and note = 'Уже накоплено';
+
+-- =========================================================
+--  Копилки: откладывание бывает двух видов — деньги остаются
+--  на кошельке или физически снимаются в копилку
+--  SQL Editor → New query → вставить → Run.
+-- =========================================================
+
+-- true: деньги сняты со счёта и лежат в копилке, на кошельке их больше нет.
+-- false (по умолчанию): остаются на кошельке, просто помечены под цель.
+alter table public.fin_ops
+  add column if not exists withdrawn boolean not null default false;
+
+-- =========================================================
+--  Копилки: из них можно не только копить, но и тратить
+--  SQL Editor → New query → вставить → Run. Ничего не удаляет.
+-- =========================================================
+
+-- пятый вид операции: трата из копилки. Сумма уходит из накопленного,
+-- а кошелёк трогается только если деньги лежали на нём (off_wallet = false).
+alter table public.fin_ops drop constraint if exists fin_ops_kind_check;
+alter table public.fin_ops
+  add constraint fin_ops_kind_check
+  check (kind in ('income', 'expense', 'adjust', 'save', 'unsave'));

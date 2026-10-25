@@ -230,6 +230,21 @@ await tap("+");
 await checkSheetWidth("новая привычка");
 await tap("Отмена");
 
+// деньги: разбор свободного остатка, правка копилки и трата из неё
+await tap("Деньги");
+await tap("разбор");
+await checkSheetWidth("разбор свободных");
+await shot("09-разбор");
+await tap("Закрыть");
+await tap("Копилка");
+await checkSheetWidth("копилка");
+await shot("10-копилка");
+await tap("Отмена");
+await tap("Потратить");
+await checkSheetWidth("трата из копилки");
+await shot("11-трата-из-копилки");
+await tap("Отмена");
+
 await page.setViewport({ width: 428, height: 926, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
 await new Promise((r) => setTimeout(r, 400));
 

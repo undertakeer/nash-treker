@@ -16,6 +16,18 @@ const ckKey = (habitId, userId, day) => `${habitId}|${userId}|${day}`;
 
 /** 42P01 = undefined_table: миграция не прогнана */
 const NO_TABLE = "Таблица не создана — прогоните supabase/apply.sql в SQL Editor";
+const OLD_SCHEMA = "База отстала от приложения — прогоните новые файлы из supabase/migrations";
+
+/**
+ * Текст ошибки записи. Отдельно разбираем те, что лечатся прогоном SQL:
+ * нет таблицы, нет колонки или значение не прошло проверку — всё это значит,
+ * что миграцию ещё не прогнали, а не что запись плохая.
+ */
+const dbError = (error, fallback) => {
+  if (error?.code === "42P01") return NO_TABLE;
+  if (error?.code === "42703" || error?.code === "23514") return OLD_SCHEMA;
+  return fallback;
+};
 
 /** Отступ между плашкой меню и низом окна приложения, в пикселях.
     Ниже нуля не опускаем: за краем окна рисовать нечем, плашка там просто
@@ -494,7 +506,7 @@ export function StoreProvider({ children }) {
       setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, ...patch } : h)));
       const { error } = await supabase.from("habits").update(patch).eq("id", id);
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         loadAll();
       }
     },
@@ -855,7 +867,7 @@ export function StoreProvider({ children }) {
     async (id, patch) => {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
       const { error } = await supabase.from("tasks").update(patch).eq("id", id);
-      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+      if (error) showToast(dbError(error, "Не удалось сохранить"), "⚠️");
     },
     [showToast]
   );
@@ -929,7 +941,7 @@ export function StoreProvider({ children }) {
         .select()
         .single();
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить место", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить место"), "⚠️");
         return null;
       }
       setPlaces((prev) => (prev.some((x) => x.id === data.id) ? prev : [data, ...prev]));
@@ -957,7 +969,7 @@ export function StoreProvider({ children }) {
       setPlaces((prev) => prev.map((x) => (x.id === id ? { ...x, ...next } : x)));
       const { error } = await supabase.from("places").update(next).eq("id", id);
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         return;
       }
       // старый снимок больше не нужен — иначе он навсегда останется в хранилище
@@ -1014,7 +1026,7 @@ export function StoreProvider({ children }) {
         .select()
         .single();
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         return null;
       }
       setWishlist((prev) => (prev.some((w) => w.id === data.id) ? prev : [...prev, data]));
@@ -1039,7 +1051,7 @@ export function StoreProvider({ children }) {
       setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, ...next } : w)));
       const { error } = await supabase.from("wishlist").update(next).eq("id", id);
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         return;
       }
       if (shot.photo_url && before?.photo_url) dropPhotoFiles(before);
@@ -1088,7 +1100,7 @@ export function StoreProvider({ children }) {
         .select()
         .single();
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         return null;
       }
       setMeds((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
@@ -1102,7 +1114,7 @@ export function StoreProvider({ children }) {
     async (id, patch) => {
       setMeds((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
       const { error } = await supabase.from("meds").update(patch).eq("id", id);
-      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+      if (error) showToast(dbError(error, "Не удалось сохранить"), "⚠️");
     },
     [showToast]
   );
@@ -1140,7 +1152,7 @@ export function StoreProvider({ children }) {
                 { onConflict: "med_id,user_id,day,slot", ignoreDuplicates: true });
       if (error) {
         setMedTakes((prev) => prev.filter((t) => !same(t)));
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось отметить", "⚠️");
+        showToast(dbError(error, "Не удалось отметить"), "⚠️");
         return false;
       }
       return true;
@@ -1154,7 +1166,7 @@ export function StoreProvider({ children }) {
       const { data, error } = await supabase
         .from("med_events").insert({ ...fields, owner_id: uid }).select().single();
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         return null;
       }
       setMedEvents((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
@@ -1168,7 +1180,7 @@ export function StoreProvider({ children }) {
     async (id, patch) => {
       setMedEvents((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
       const { error } = await supabase.from("med_events").update(patch).eq("id", id);
-      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+      if (error) showToast(dbError(error, "Не удалось сохранить"), "⚠️");
     },
     [showToast]
   );
@@ -1206,7 +1218,7 @@ export function StoreProvider({ children }) {
         .select()
         .single();
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         return null;
       }
       setEnvelopes((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
@@ -1219,7 +1231,7 @@ export function StoreProvider({ children }) {
     async (id, patch) => {
       setEnvelopes((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
       const { error } = await supabase.from("fin_envelopes").update(patch).eq("id", id);
-      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+      if (error) showToast(dbError(error, "Не удалось сохранить"), "⚠️");
     },
     [showToast]
   );
@@ -1243,7 +1255,7 @@ export function StoreProvider({ children }) {
       const { data, error } = await supabase
         .from("fin_ops").insert({ fee: 0, ...fields, owner_id: uid }).select().single();
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось записать", "⚠️");
+        showToast(dbError(error, "Не удалось записать"), "⚠️");
         return null;
       }
       setFinOps((prev) => (prev.some((x) => x.id === data.id) ? prev : [data, ...prev]));
@@ -1252,20 +1264,42 @@ export function StoreProvider({ children }) {
     [uid, showToast]
   );
 
+  // правку показываем сразу, но если база отказала — возвращаем как было:
+  // иначе на экране деньги посчитаны по одному, а в базе лежит другое
   const updateFinOp = useCallback(
     async (id, patch) => {
-      setFinOps((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+      let before = null;
+      setFinOps((prev) => prev.map((o) => {
+        if (o.id !== id) return o;
+        before = o;
+        return { ...o, ...patch };
+      }));
       const { error } = await supabase.from("fin_ops").update(patch).eq("id", id);
-      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+      if (error) {
+        if (before) setFinOps((prev) => prev.map((o) => (o.id === id ? before : o)));
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
+        return false;
+      }
+      return true;
     },
     [showToast]
   );
 
   const deleteFinOp = useCallback(
     async (id) => {
-      setFinOps((prev) => prev.filter((x) => x.id !== id));
-      await supabase.from("fin_ops").delete().eq("id", id);
+      let before = null;
+      setFinOps((prev) => {
+        before = prev.find((x) => x.id === id) || null;
+        return prev.filter((x) => x.id !== id);
+      });
+      const { error } = await supabase.from("fin_ops").delete().eq("id", id);
+      if (error) {
+        if (before) setFinOps((prev) => (prev.some((x) => x.id === id) ? prev : [before, ...prev]));
+        showToast(dbError(error, "Не удалось удалить"), "⚠️");
+        return false;
+      }
       showToast("Запись удалена", "🗑");
+      return true;
     },
     [showToast]
   );
@@ -1281,7 +1315,7 @@ export function StoreProvider({ children }) {
         .select()
         .single();
       if (error) {
-        showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
         return null;
       }
       setFinGoals((prev) => (prev.some((g) => g.id === data.id) ? prev : [...prev, data]));
@@ -1292,9 +1326,19 @@ export function StoreProvider({ children }) {
 
   const updateGoalSaving = useCallback(
     async (id, patch) => {
-      setFinGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+      let before = null;
+      setFinGoals((prev) => prev.map((g) => {
+        if (g.id !== id) return g;
+        before = g;
+        return { ...g, ...patch };
+      }));
       const { error } = await supabase.from("fin_goals").update(patch).eq("id", id);
-      if (error) showToast(error.code === "42P01" ? NO_TABLE : "Не удалось сохранить", "⚠️");
+      if (error) {
+        if (before) setFinGoals((prev) => prev.map((g) => (g.id === id ? before : g)));
+        showToast(dbError(error, "Не удалось сохранить"), "⚠️");
+        return false;
+      }
+      return true;
     },
     [showToast]
   );
@@ -1320,12 +1364,22 @@ export function StoreProvider({ children }) {
       if (!income) return null;
 
       const due = finGoals.filter((g) => !g.archived && Number(g.per_income) > 0);
+      // уже накопленное по цели: доприложенное плюс все откладывания
+      const savedOf = (g) => Number(g.opening || 0) + finOps
+        .filter((o) => o.kind === "save" && o.goal_id === g.id)
+        .reduce((sum, o) => sum + Number(o.amount), 0);
+
       let done = 0;
       for (const g of due) {
         // доля считается от этого прихода и округляется так же, как лимиты
-        const amount = g.per_mode === "percent"
+        const planned = g.per_mode === "percent"
           ? roundAllocation((Number(fields.amount) * Number(g.per_income)) / 100)
           : Number(g.per_income);
+        // в собранную цель больше не доливаем: берём только остаток до суммы
+        const room = g.target === null || g.target === undefined
+          ? null
+          : Math.max(0, Number(g.target) - savedOf(g));
+        const amount = room === null ? planned : Math.min(planned, room);
         if (amount <= 0) continue;
         await addFinOp({
           kind: "save",
@@ -1340,7 +1394,7 @@ export function StoreProvider({ children }) {
       if (done) showToast(`Отложено по ${done} ${done === 1 ? "копилке" : "копилкам"}`, "🎯");
       return income;
     },
-    [addFinOp, finGoals, showToast]
+    [addFinOp, finGoals, finOps, showToast]
   );
 
   // ---------- набор вкладок ----------

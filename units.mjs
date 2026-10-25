@@ -182,6 +182,21 @@ check("поле ввода чистится, но не мешает набира
   assert.equal(F.cleanAmountInput("1.239"), "1.23", "больше двух знаков не нужно");
 });
 
+check("сумма для поля ввода: без валюты, ноль — пустая строка", () => {
+  assert.equal(F.plainAmount(1040), "1040");
+  assert.equal(F.plainAmount("1040.00"), "1040", "лишние нули в поле мешают");
+  assert.equal(F.plainAmount(0.8), "0.8");
+  assert.equal(F.plainAmount(0), "", "ноль в поле выглядит как уже введённое");
+  assert.equal(F.plainAmount(null), "");
+});
+
+check("минус у суммы стоит перед валютой", () => {
+  assert.equal(F.money(-855), "−$855", "$-855 читается как цена со скидкой");
+  assert.equal(F.moneyExact(-0.85), "−$0.85");
+  assert.equal(F.money(-855, "сум"), "−855 сум");
+  assert.equal(F.money(855), "$855", "положительные не трогаем");
+});
+
 check("сумма меньше доллара не превращается в ноль", () => {
   assert.equal(F.money(0.8), "$0.80", "иначе введённые 80 центов выглядят как ничего");
   assert.equal(F.money(0), "$0");
@@ -265,6 +280,34 @@ check("цели копятся и не обнуляются с новой зар
   assert.equal(sum.rows[1].target, null);
   assert.equal(sum.rows[1].percent, null, "без цели процента нет");
   assert.equal(sum.saved, 250, "всего отложено");
+});
+
+check("двойной счёт находится точным совпадением сумм", () => {
+  const ops = [
+    inc("2026-10-23", 1899, "2026-10-23T10:00:00Z", "i1"),
+    exp("2026-10-24", 820, null, 8.2, "2026-10-24T20:00:00Z"),
+    { kind: "save", goal_id: "g1", day: "2026-10-24", amount: 150, fee: 0 },
+    { kind: "save", goal_id: "g2", day: "2026-10-24", amount: 570, fee: 0 },
+    { kind: "save", goal_id: "g3", day: "2026-10-24", amount: 100, fee: 0 },
+  ];
+  const period = F.periodFor(ops, "2026-10-25");
+  const hint = F.doubleSpendHint(ops, period);
+  assert.ok(hint, "150 + 570 + 100 = 820, это та же трата");
+  assert.equal(hint.amount, 820);
+  assert.equal(hint.saves.length, 3);
+  assert.equal(Number(hint.expense.fee), 8.2, "комиссию переносим на пометку");
+
+  // помеченное снятым уже не двоится
+  const fixed = ops.map((o) => (o.kind === "save" ? { ...o, withdrawn: true } : o));
+  assert.equal(F.doubleSpendHint(fixed, period), null);
+
+  // не совпало по сумме — молчим, догадок не строим
+  const other = ops.map((o) => (o.kind === "expense" ? { ...o, amount: 300 } : o));
+  assert.equal(F.doubleSpendHint(other, period), null);
+
+  // трата не с кошелька деньги не уводила, двойного счёта нет
+  const offWallet = ops.map((o) => (o.kind === "expense" ? { ...o, off_wallet: true } : o));
+  assert.equal(F.doubleSpendHint(offWallet, period), null);
 });
 
 check("уже накопленное не взнос и не резерв на кошельке", () => {

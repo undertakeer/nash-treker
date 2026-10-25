@@ -13,20 +13,29 @@ export const roundAllocation = (v) => Math.ceil(cents(v) / 10) * 10;
 /** Всё остальное показываем без копеек, отбрасывая их в свою пользу */
 export const roundDown = (v) => Math.trunc(cents(v));
 
+// знак ставим перед валютой: «−$855» читается, «$-855» нет
+const withCurrency = (body, negative, currency) => {
+  const sign = negative ? "−" : "";
+  return currency === "$" || currency === "€"
+    ? `${sign}${currency}${body}`
+    : `${sign}${body} ${currency}`;
+};
+
 export const money = (v, currency = "$") => {
   const exact = cents(v);
   const n = roundDown(exact);
   // копейки отбрасываем, но если от суммы при этом ничего не остаётся,
   // показываем как есть: иначе введённые 0.80 выглядят как «ничего»
   if (n === 0 && exact !== 0) return moneyExact(exact, currency);
-  return currency === "$" || currency === "€" ? `${currency}${n}` : `${n} ${currency}`;
+  return withCurrency(Math.abs(n), n < 0, currency);
 };
 
 /** Точная сумма с копейками — для истории операций */
 export const moneyExact = (v, currency = "$") => {
   const n = cents(v);
-  const body = Number.isInteger(n) ? String(n) : n.toFixed(2);
-  return currency === "$" || currency === "€" ? `${currency}${body}` : `${body} ${currency}`;
+  const abs = Math.abs(n);
+  const body = Number.isInteger(abs) ? String(abs) : abs.toFixed(2);
+  return withCurrency(body, n < 0, currency);
 };
 
 /**
@@ -39,6 +48,12 @@ export function parseAmount(raw) {
   if (!s || s === "." || !/^\d*\.?\d*$/.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) ? cents(n) : null;
+}
+
+/** Сумма для поля ввода: без валюты и без лишних нулей, ноль — пустая строка */
+export function plainAmount(v) {
+  const n = cents(v);
+  return n ? String(n) : "";
 }
 
 /** То, что можно оставить в поле во время набора: цифры и один разделитель */
@@ -59,10 +74,13 @@ export const withFee = (op) => cents(num(op.amount) + num(op.fee));
  * Трата — да, если не помечена «не с кошелька».
  * Откладывание — только если деньги физически сняты в копилку; иначе они
  * остаются на кошельке и лишь помечены под цель.
+ * Трата из копилки — наоборот: кошелёк уменьшается, только если деньги
+ * лежали на нём помеченными; снятые раньше наличные его уже не касаются.
  */
 export const hitsWallet = (op) => {
   if (op.kind === "expense") return !op.off_wallet;
   if (op.kind === "save") return Boolean(op.withdrawn);
+  if (op.kind === "unsave") return !op.off_wallet;
   return false;
 };
 
@@ -197,6 +215,8 @@ export function periodPlan(envelopes, ops, period) {
     .filter((o) => o.kind === "expense" && !o.envelope_id)
     .reduce((s, o) => s + withFee(o), 0);
   const fees = mine.reduce((s, o) => s + num(o.fee), 0);
+  // с кошелька ушло не только тратами: снятия в копилку и траты из неё тоже
+  const outflow = mine.filter(hitsWallet).reduce((s, o) => s + withFee(o), 0);
   // ещё не потраченные лимиты: столько денег должно остаться на кошельке
   const reserved = rows.reduce((s, r) => s + Math.max(0, r.left ?? 0), 0);
 
@@ -205,6 +225,7 @@ export function periodPlan(envelopes, ops, period) {
     income,
     allocated,
     spent,
+    outflow: cents(outflow),
     looseSpent,
     fees,
     free: cents(income - allocated),
@@ -233,38 +254,49 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
   const live = goals.filter((g) => !g.archived);
   const mine = period ? ops.filter((o) => inPeriod(o, period)) : [];
 
+  const sum = (list) => cents(list.reduce((s, o) => s + num(o.amount), 0));
+  const forGoal = (g, kind) => ops.filter((o) => o.kind === kind && o.goal_id === g.id);
+
   const rows = live.map((g) => {
     // то, что лежало до начала учёта, в прогресс входит, но деньгами
     // с кошелька не является и взносом за период не считается
     const opening = cents(g.opening);
+    const saves = forGoal(g, "save");
     // в резерв на кошельке попадает только то, что с кошелька не снимали:
     // снятые деньги уже уменьшили баланс и второй раз вычитаться не должны
-    const earmarked = cents(
-      ops
-        .filter((o) => o.kind === "save" && o.goal_id === g.id && !o.withdrawn)
-        .reduce((s, o) => s + num(o.amount), 0)
-    );
-    const movedOut = cents(
-      ops
-        .filter((o) => o.kind === "save" && o.goal_id === g.id && o.withdrawn)
-        .reduce((s, o) => s + num(o.amount), 0)
-    );
-    const saved = cents(opening + earmarked + movedOut);
+    const marked = sum(saves.filter((o) => !o.withdrawn));
+    const movedOut = sum(saves.filter((o) => o.withdrawn));
+    // траты из копилки уменьшают накопленное; те, что шли с кошелька,
+    // заодно освобождают резерв — эти деньги уже потрачены
+    const takenOps = forGoal(g, "unsave");
+    const taken = sum(takenOps);
+    const takenFromWallet = sum(takenOps.filter((o) => !o.off_wallet));
+    const earmarked = cents(Math.max(0, marked - takenFromWallet));
+    const saved = cents(Math.max(0, opening + marked + movedOut - taken));
     const target = g.target === null || g.target === undefined ? null : cents(g.target);
 
     // сколько полагается внести в этом периоде и сколько уже внесено
-    const due = g.per_mode === "percent"
+    const planned = g.per_mode === "percent"
       ? roundAllocation((num(periodIncome) * num(g.per_income)) / 100)
       : cents(g.per_income);
-    const paid = cents(
-      mine.filter((o) => o.kind === "save" && o.goal_id === g.id).reduce((s, o) => s + num(o.amount), 0)
-    );
+    // взнос периода — это нетто: отложил и тут же забрал обратно значит ноль
+    const paid = cents(Math.max(
+      0,
+      sum(mine.filter((o) => o.kind === "save" && o.goal_id === g.id))
+        - sum(mine.filter((o) => o.kind === "unsave" && o.goal_id === g.id))
+    ));
+    // собранная цель больше ничего не требует: взнос ограничен остатком до суммы.
+    // считаем от накопленного без взносов этого периода, иначе взнос съел бы
+    // сам себя и «внесено» никогда не закрывалось бы
+    const room = target === null ? null : cents(Math.max(0, target - cents(saved - paid)));
+    const due = room === null ? planned : Math.min(planned, room);
 
     return {
       goal: g,
       opening,
       earmarked,
       movedOut,
+      taken,
       saved,
       target,
       left: target === null ? null : cents(Math.max(0, target - saved)),
@@ -285,6 +317,31 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
     earmarked: cents(rows.reduce((s, r) => s + r.earmarked, 0)),
     pending: cents(rows.reduce((s, r) => s + r.pending, 0)),
   };
+}
+
+/**
+ * Подсказка про двойной счёт: одни и те же деньги сняты тратой и тут же
+ * помечены под цель. Снаружи это выглядит как нехватка на кошельке, хотя
+ * физически сумма ушла один раз. Ищем точное совпадение, без догадок.
+ */
+export function doubleSpendHint(ops, period) {
+  if (!period) return null;
+  const mine = ops.filter((o) => inPeriod(o, period));
+  const saves = mine.filter((o) => o.kind === "save" && !o.withdrawn);
+  const total = cents(saves.reduce((s, o) => s + num(o.amount), 0));
+  if (!saves.length || total <= 0) return null;
+
+  const spent = mine.filter((o) => o.kind === "expense" && !o.off_wallet);
+  // вся помеченная сумма совпала с одной тратой — заполнили цели одним снятием
+  const whole = spent.find((o) => cents(o.amount) === total);
+  if (whole) return { expense: whole, saves, amount: total };
+
+  // или одна трата совпала с одним откладыванием
+  for (const e of spent) {
+    const one = saves.find((o) => cents(o.amount) === cents(e.amount));
+    if (one) return { expense: e, saves: [one], amount: cents(e.amount) };
+  }
+  return null;
 }
 
 /**
