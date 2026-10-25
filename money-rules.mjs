@@ -136,6 +136,64 @@ rule("1040 до учёта плюс 550 операцией", {
   "ещё отложить": 0, "свободно": 150,
 });
 
+// ---------- откладывание со снятием со счёта ----------
+rule("отложено 550 со снятием со счёта", {
+  envelopes: [envFixed], goals: [goal],
+  ops: [income, { kind: "save", goal_id: "g1", day: DAY, amount: 550, fee: 0,
+                  withdrawn: true, created_at: at(DAY, 9) }],
+}, {
+  // деньги ушли с кошелька и лежат в копилке — резервировать нечего
+  "кошелёк": 450, "приход периода": 1000, "снято за период": 0,
+  "отложено с кошелька": 0, "накоплено всего": 550, "взнос за период": 550,
+  "ещё отложить": 0, "свободно": 150,
+});
+
+rule("снятие в копилку с комиссией", {
+  envelopes: [envFixed], goals: [goal],
+  ops: [income, { kind: "save", goal_id: "g1", day: DAY, amount: 550, fee: 5.5,
+                  withdrawn: true, created_at: at(DAY, 9) }],
+}, {
+  "кошелёк": 444.5, "отложено с кошелька": 0, "накоплено всего": 550, "свободно": 144.5,
+});
+
+rule("две копилки: одна снята, другая помечена", {
+  envelopes: [envFixed],
+  goals: [goal, { id: "g2", target: null, per_mode: "fixed", per_income: 0, opening: 0, position: 2 }],
+  ops: [
+    income,
+    { kind: "save", goal_id: "g1", day: DAY, amount: 550, fee: 0, withdrawn: true, created_at: at(DAY, 9) },
+    { kind: "save", goal_id: "g2", day: DAY, amount: 100, fee: 0, created_at: at(DAY, 10) },
+  ],
+}, {
+  "кошелёк": 450, "отложено с кошелька": 100, "накоплено всего": 650,
+  "взнос за период": 650, "ещё отложить": 0, "свободно": 50,
+});
+
+// ровно то, что случилось у пользователя: трата и откладывание за одно снятие
+rule("трата 820 плюс откладывание тех же 820 — двойной счёт", {
+  envelopes: [envFixed],
+  goals: [{ ...goal, per_income: 820 }],
+  ops: [
+    income,
+    { kind: "expense", day: DAY, amount: 820, fee: 0, envelope_id: null, created_at: at(DAY, 8) },
+    { kind: "save", goal_id: "g1", day: DAY, amount: 820, fee: 0, created_at: at(DAY, 9) },
+  ],
+}, {
+  "кошелёк": 180, "отложено с кошелька": 820, "свободно": -940,
+});
+
+rule("то же самое одним откладыванием со снятием — сходится", {
+  envelopes: [envFixed],
+  goals: [{ ...goal, per_income: 820 }],
+  ops: [
+    income,
+    { kind: "save", goal_id: "g1", day: DAY, amount: 820, fee: 0, withdrawn: true, created_at: at(DAY, 9) },
+  ],
+}, {
+  "кошелёк": 180, "отложено с кошелька": 0, "накоплено всего": 820,
+  "взнос за период": 820, "свободно": -120,
+});
+
 // ---------- границы периода ----------
 rule("утренняя трата до вечерней зарплаты", {
   envelopes: [envFixed], goals: [goal],

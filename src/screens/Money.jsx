@@ -300,12 +300,14 @@ export default function Money({ onOpenOps }) {
         open={Boolean(saveTo)}
         title={saveTo ? `${saveTo.emoji} ${saveTo.title}` : ""}
         defaultAmount={saveTo?.pending ? String(saveTo.pending) : ""}
-        hint="Деньги остаются на кошельке, просто помечены под цель."
+        hint="Пометить на кошельке или записать снятие — выберите ниже."
         actionLabel="Отложить"
         colorKey={saveTo?.color || "violet"}
         currency={currency}
+        withWithdraw
+        feePercent={feePercent}
         onClose={() => setSaveTo(null)}
-        onSubmit={async (amount, note) => {
+        onSubmit={async (amount, note, day, extra) => {
           await addFinOp({
             kind: "save",
             goal_id: saveTo.id,
@@ -313,6 +315,8 @@ export default function Money({ onOpenOps }) {
             amount,
             note: note || null,
             day: today,
+            withdrawn: extra.withdrawn,
+            fee: extra.withdrawn && extra.takeFee ? feeFor(amount, feePercent) : 0,
           });
           setSaveTo(null);
         }}
@@ -477,13 +481,15 @@ function EnvelopeRow({ row, currency, income, daysLeft, onSpend, onEdit }) {
 
 function AmountSheet({
   open, title, hint, actionLabel, colorKey, currency, onClose, onSubmit,
-  withDate = false, withOptions = false, today, feePercent = 0, defaultAmount = "",
+  withDate = false, withOptions = false, withWithdraw = false,
+  today, feePercent = 0, defaultAmount = "",
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [day, setDay] = useState(today);
   const [takeFee, setTakeFee] = useState(true);
   const [offWallet, setOffWallet] = useState(false);
+  const [withdrawn, setWithdrawn] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -492,6 +498,7 @@ function AmountSheet({
     setDay(today);
     setTakeFee(true);
     setOffWallet(false);
+    setWithdrawn(false);
   }, [open, today, defaultAmount]);
 
   const value = parseAmount(amount);
@@ -501,7 +508,7 @@ function AmountSheet({
     if (!valid || busy) return;
     setBusy(true);
     try {
-      await onSubmit(value, note.trim(), day, { takeFee, offWallet });
+      await onSubmit(value, note.trim(), day, { takeFee, offWallet, withdrawn });
       setAmount("");
       setNote("");
     } finally {
@@ -558,6 +565,36 @@ function AmountSheet({
                   <Switch checked={takeFee} onChange={setTakeFee} />
                 </div>
               )}
+            </div>
+          )}
+
+          {withWithdraw && (
+            <div className="rounded-2xl bg-white/5 border border-white/8 divide-y divide-white/6">
+              <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                <div>
+                  <div className="text-[14.5px] font-semibold">Деньги сняты со счёта</div>
+                  <div className="text-[12.5px] text-white/35 leading-relaxed">
+                    Включите, если физически сняли и положили в копилку — баланс
+                    кошелька уменьшится. Выключено: деньги остаются на кошельке
+                    и просто помечены под цель.
+                  </div>
+                </div>
+                <Switch checked={withdrawn} onChange={setWithdrawn} />
+              </div>
+              {withdrawn && feePercent > 0 && (
+                <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                  <div className="text-[14.5px] font-semibold">Комиссия {feePercent}%</div>
+                  <Switch checked={takeFee} onChange={setTakeFee} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {withWithdraw && valid && withdrawn && takeFee && feePercent > 0 && (
+            <div className="text-[12.5px] text-white/40 -mt-2">
+              С кошелька уйдёт {moneyExact(value + feeFor(value, feePercent), currency)}
+              {" "}— в копилку {moneyExact(value, currency)}, комиссия{" "}
+              {moneyExact(feeFor(value, feePercent), currency)}.
             </div>
           )}
 
@@ -653,7 +690,9 @@ function IncomeSheet({ open, currency, today, onClose, onSubmit }) {
 
 /** Цель-накопление: сколько собрано и сколько осталось до суммы */
 function GoalRow({ row, currency, onSave, onEdit }) {
-  const { goal: g, saved, opening, earmarked, target, left, percent, done, due, paid, pending, settled } = row;
+  const {
+    goal: g, saved, opening, earmarked, movedOut, target, left, percent, done, due, paid, pending, settled,
+  } = row;
   const color = g.color || "violet";
 
   return (
@@ -712,9 +751,13 @@ function GoalRow({ row, currency, onSave, onEdit }) {
             </button>
           </div>
 
-          {opening > 0 && earmarked > 0 && (
+          {[opening, earmarked, movedOut].filter((v) => v > 0).length > 1 && (
             <div className="mt-2 text-[11.5px] text-white/35">
-              {money(opening, currency)} было до учёта + {money(earmarked, currency)} отложено
+              {[
+                opening > 0 ? `${money(opening, currency)} было до учёта` : null,
+                movedOut > 0 ? `${money(movedOut, currency)} снято в копилку` : null,
+                earmarked > 0 ? `${money(earmarked, currency)} помечено на кошельке` : null,
+              ].filter(Boolean).join(" + ")}
             </div>
           )}
 
@@ -980,7 +1023,8 @@ function OpLine({ op, currency, onClick }) {
         <span className="block text-[12px] text-white/35 truncate">
           {humanDate(op.day)}
           {op.kind === "expense" && op.off_wallet ? " · не с кошелька" : ""}
-          {op.kind === "expense" && Number(op.fee) > 0 ? ` · комиссия ${moneyExact(op.fee, currency)}` : ""}
+          {saving ? (op.withdrawn ? " · снято со счёта" : " · помечено на кошельке") : ""}
+          {Number(op.fee) > 0 ? ` · комиссия ${moneyExact(op.fee, currency)}` : ""}
         </span>
       </span>
       <span
@@ -1147,6 +1191,7 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
   const [envelopeId, setEnvelopeId] = useState(null);
   const [takeFee, setTakeFee] = useState(true);
   const [offWallet, setOffWallet] = useState(false);
+  const [withdrawn, setWithdrawn] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -1158,6 +1203,7 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
     setEnvelopeId(op.envelope_id || null);
     setTakeFee(Number(op.fee) > 0);
     setOffWallet(Boolean(op.off_wallet));
+    setWithdrawn(Boolean(op.withdrawn));
     setConfirmDelete(false);
     setBusy(false);
   }, [op]);
@@ -1166,6 +1212,7 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
   const valid = value !== null && value > 0;
   const expense = op?.kind === "expense";
   const adjust = op?.kind === "adjust";
+  const saving = op?.kind === "save";
   const sign = adjust && Number(op?.amount) < 0 ? -1 : 1;
 
   async function save() {
@@ -1180,6 +1227,10 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
       patch.envelope_id = envelopeId;
       patch.off_wallet = offWallet;
       patch.fee = offWallet || !takeFee ? 0 : feeFor(value, feePercent);
+    }
+    if (saving) {
+      patch.withdrawn = withdrawn;
+      patch.fee = withdrawn && takeFee ? feeFor(value, feePercent) : 0;
     }
     try {
       await updateFinOp(op.id, patch);
@@ -1241,6 +1292,27 @@ function OpEditor({ op, currency, feePercent, envelopes, onClose }) {
                 className="w-full px-4 py-3.5 rounded-2xl bg-white/6 border border-white/10 outline-none font-semibold"
               />
             </Field>
+
+            {saving && (
+              <div className="rounded-2xl bg-white/5 border border-white/8 divide-y divide-white/6">
+                <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                  <div>
+                    <div className="text-[14.5px] font-semibold">Деньги сняты со счёта</div>
+                    <div className="text-[12.5px] text-white/35 leading-relaxed">
+                      Включено — баланс кошелька уменьшается. Выключено — деньги
+                      остаются на кошельке и просто помечены под цель.
+                    </div>
+                  </div>
+                  <Switch checked={withdrawn} onChange={setWithdrawn} />
+                </div>
+                {withdrawn && feePercent > 0 && (
+                  <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                    <div className="text-[14.5px] font-semibold">Комиссия {feePercent}%</div>
+                    <Switch checked={takeFee} onChange={setTakeFee} />
+                  </div>
+                )}
+              </div>
+            )}
 
             {expense && (
               <>

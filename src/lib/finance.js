@@ -54,8 +54,17 @@ export const feeFor = (amount, percent) => cents((num(amount) * num(percent)) / 
 /** Полная стоимость траты — сумма плюс удержанная комиссия */
 export const withFee = (op) => cents(num(op.amount) + num(op.fee));
 
-/** Уменьшает ли операция кошелёк: часть трат идёт мимо него */
-export const hitsWallet = (op) => op.kind !== "expense" || !op.off_wallet;
+/**
+ * Уменьшает ли операция кошелёк.
+ * Трата — да, если не помечена «не с кошелька».
+ * Откладывание — только если деньги физически сняты в копилку; иначе они
+ * остаются на кошельке и лишь помечены под цель.
+ */
+export const hitsWallet = (op) => {
+  if (op.kind === "expense") return !op.off_wallet;
+  if (op.kind === "save") return Boolean(op.withdrawn);
+  return false;
+};
 
 const plusMonth = (iso) => {
   const d = fromISO(iso);
@@ -212,8 +221,6 @@ export function periodPlan(envelopes, ops, period) {
 export function walletBalance(ops) {
   return cents(ops.reduce((s, o) => {
     if (o.kind === "income" || o.kind === "adjust") return s + num(o.amount);
-    // откладывание под цель деньги с кошелька не уносит: они просто помечены
-    if (o.kind !== "expense") return s;
     return hitsWallet(o) ? s - withFee(o) : s;
   }, 0));
 }
@@ -230,10 +237,19 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
     // то, что лежало до начала учёта, в прогресс входит, но деньгами
     // с кошелька не является и взносом за период не считается
     const opening = cents(g.opening);
+    // в резерв на кошельке попадает только то, что с кошелька не снимали:
+    // снятые деньги уже уменьшили баланс и второй раз вычитаться не должны
     const earmarked = cents(
-      ops.filter((o) => o.kind === "save" && o.goal_id === g.id).reduce((s, o) => s + num(o.amount), 0)
+      ops
+        .filter((o) => o.kind === "save" && o.goal_id === g.id && !o.withdrawn)
+        .reduce((s, o) => s + num(o.amount), 0)
     );
-    const saved = cents(opening + earmarked);
+    const movedOut = cents(
+      ops
+        .filter((o) => o.kind === "save" && o.goal_id === g.id && o.withdrawn)
+        .reduce((s, o) => s + num(o.amount), 0)
+    );
+    const saved = cents(opening + earmarked + movedOut);
     const target = g.target === null || g.target === undefined ? null : cents(g.target);
 
     // сколько полагается внести в этом периоде и сколько уже внесено
@@ -248,6 +264,7 @@ export function goalsSummary(goals, ops, period = null, periodIncome = 0) {
       goal: g,
       opening,
       earmarked,
+      movedOut,
       saved,
       target,
       left: target === null ? null : cents(Math.max(0, target - saved)),
